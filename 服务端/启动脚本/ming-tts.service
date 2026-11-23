@@ -2,14 +2,19 @@
 Description=Ming-3.0-TTS SGLang service
 After=network.target
 
+# 部署前按你的环境改 ExecStart 路径，以及下面的目录/日志环境变量
 [Service]
 Type=simple
+Environment=MING_SGLANG_DIR=/opt/sglang
+Environment=MING_MODEL_DIR=/opt/models/Ming-3.0-tts-0.5B
+Environment=MING_FAST_PORT=8000
+Environment=MING_LOG_DIR=/var/log/ming-tts
 ExecStart=/bin/bash /opt/sglang/ming_tts_service.sh
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
-StandardOutput=append:/mnt/c/WSL/serve.log
-StandardError=append:/mnt/c/WSL/serve.log
+StandardOutput=append:/var/log/ming-tts/serve.log
+StandardError=append:/var/log/ming-tts/serve.log
 
 [Install]
 WantedBy=multi-user.target

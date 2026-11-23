@@ -2,8 +2,10 @@
 # Ming-3.0-TTS 启动/停止脚本（systemd 托管版）
 # 用法: start_ming.sh        启动并等待就绪
 #       start_ming.sh stop   停止
-PORT=8000
-LOG=/mnt/c/WSL/serve.log
+PORT="${MING_FAST_PORT:-8000}"
+# 日志位置跟服务单元保持一致，可用 MING_LOG_DIR 覆盖（systemd 里用 %L 之类不方便，故显式配置）
+LOG_DIR="${MING_LOG_DIR:-/var/log/ming-tts}"
+LOG="$LOG_DIR/serve.log"
 UNIT=ming-tts.service
 MIN_FREE=4700   # 模型加载后约占用 5.6GB 显存，低于这个值必然 CUDA OOM
 
@@ -19,7 +21,7 @@ vram_check() {
     echo "显卡显存只剩 ${free}MiB，模型需要约 5.6GB（5640MiB），这样启动一定 OOM。"
     echo "占用显卡的程序："
     nvidia-smi | sed -n "/Processes:/,\$p" | grep -E ".exe|python" | sed "s/|//g;s/  */ /g"
-    echo "先关掉游戏 / Steam / 游戏加速器 / 视频剪辑软件，再双击启动。"
+    echo "先关掉游戏 / 视频剪辑 / 其它占卡程序，再重新启动。"
     return 1
   fi
   return 0
@@ -56,5 +58,5 @@ for i in $(seq 1 300); do
     exit 1
   fi
 done
-echo "15 分钟内没等到就绪，请查日志: C:\\WSL\\serve.log"
+echo "15 分钟内没等到就绪，请查日志: $LOG"
 tail -10 "$LOG" 2>/dev/null

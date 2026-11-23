@@ -2,9 +2,13 @@
 
 给 [Ming-3.0-TTS](https://github.com/Alexwell-Chen/Ming-3.0-TTS) 做的一套本地单页控制台：**一个页面 + 一个管家进程**，把「完整模式（官方推理）」和「快速模式（SGLang）」两套引擎的启停、任务选择、音色管理、批量生成、结果试听全部收在一屏里。
 
-面向 Windows + WSL2 + 单张消费级显卡（开发机是 RTX 3060 Laptop 6GB），不依赖任何前端框架，页面是单个 HTML 文件。
-
 ![控制台截图](docs/console.png)
+
+**适合谁**：已经按官方说明装好 Ming-3.0-TTS、想有个界面天天用的本地玩家。Windows + WSL2（或 Linux 原生）+ 单张消费级显卡，开发机是 RTX 3060 Laptop 6GB。
+
+**不适合谁**：想看官方推理代码（去上游仓库）；macOS（没有 CUDA，未适配）；没有模型权重只想看看界面的（页面能开，但生成不了）。
+
+> **本仓库不含模型权重，也不含任何语音素材。** 模型与内置音色文案的版权、许可与合规使用请以 [Ming-3.0-TTS](https://github.com/Alexwell-Chen/Ming-3.0-TTS) 官方说明为准，详见 [THIRD-PARTY.md](THIRD-PARTY.md)。
 
 ## 它解决什么问题
 
@@ -41,7 +45,7 @@ ming-service-host.py  ── 静态页面 + /start /stop /status ──► wsl.e
    │                                                          ├─ systemd: ming-official → 8010 官方推理
    │                                                          └─ /opt/sglang/start_ming.sh → 8000 SGLang
    │
-   └─ /health 轮询、nvidia-smi 显存、C 盘余量
+   └─ /health 轮询、nvidia-smi 显存、磁盘余量
 ```
 
 ## 目录
@@ -61,10 +65,11 @@ ming-service-host.py  ── 静态页面 + /start /stop /status ──► wsl.e
   serve_official.py       FastAPI，8010，任务契约 / 分段 / 重试 / ASR 复核
   ming-official.service   systemd unit
   启动脚本/                start_ming.sh、ming-tts.service、ming-asr.service 等
-  voice_data.js           内置音色清单（页面数据来源）
+  voice_data.js           内置音色清单（页面数据来源，来源见 THIRD-PARTY.md）
+scripts/check.sh          自检：语法 + 个人路径扫描（CI 同款）
+.github/workflows/check.yml  push 时跑自检
+THIRD-PARTY.md            第三方组件、模型与音色资源的许可说明
 ```
-
-开发过程笔记（含本机路径、调参记录）不随仓库发布，只留在本地。
 
 ## 环境要求
 
@@ -116,6 +121,27 @@ cd ming-tts-console
 4. 浏览器打开 `http://127.0.0.1:8766/ming-console.html`（无桌面环境就用 SSH 端口转发）。
 
 > Linux 下没有 WSL 这一层，管家不会跑 `wsl-guard.ps1`；引擎启停走本地 `systemctl` / `bash start_ming.sh`，所以 `systemctl restart ming-official` 需要相应权限（通常用 sudo 或给服务配好权限）。
+
+### 服务端目录与日志（Windows / Linux 通用）
+
+服务端脚本里的目录都读环境变量，带默认值；`*_service.sh`、`start_ming.sh`、`serve_official.py` 一致：
+
+| 变量 | 默认 | 含义 |
+| --- | --- | --- |
+| `MING_APP_DIR` | `/opt/ming-official` | 模型代码目录（`serve_official.py` 的工作目录、`PYTHONPATH` 根） |
+| `MING_MODEL_DIR` | `/opt/models/Ming-3.0-tts-0.5B` | 模型权重目录 |
+| `MING_SGLANG_DIR` | `/opt/sglang` | SGLang 虚拟环境与 `start_ming.sh` 所在目录 |
+| `MING_VENV_PY_VER` | `python3.12` | 虚拟环境里的 Python 版本目录名（拼 `CUDA_HOME` 用） |
+| `MING_LOG_DIR` | `/var/log/ming-tts` | 服务日志目录（`start_ming.sh` 失败时 tail 的位置） |
+| `MING_FAST_PORT` | `8000` | 快速模式端口 |
+
+`服务端/ming-official.service`、`服务端/启动脚本/ming-tts.service` 里也有同名 `Environment=` 行，部署时按你的路径改这两行即可（日志默认写到 `/var/log/ming-tts/`，注意目录存在且有写权限）。
+
+### 自检
+
+```bash
+bash scripts/check.sh    # Python/Shell 语法 + 个人路径扫描，CI 也跑同一套
+```
 
 ### 端口
 

@@ -2,13 +2,20 @@
 Description=Ming TTS official full mode (8010)
 After=network.target
 
+# 部署前按你的环境改这几处（或改成 Environment= 也可以）：
+#   WorkingDirectory / ExecStart 里的 /opt/ming-official（模型代码目录）
+#   ExecStart 里的 python 路径
+#   Environment 里的 MING_MODEL_DIR（模型权重目录）
+#   StandardOutput / StandardError 的日志路径
 [Service]
 Type=simple
 WorkingDirectory=/opt/ming-official
 Environment=PYTHONPATH=/opt/ming-official/libs
+Environment=MING_APP_DIR=/opt/ming-official
+Environment=MING_MODEL_DIR=/opt/models/Ming-3.0-tts-0.5B
 ExecStart=/opt/sglang/.venv/bin/python /opt/ming-official/serve_official.py
-StandardOutput=append:/mnt/c/WSL/official_serve.log
-StandardError=append:/mnt/c/WSL/official_serve.log
+StandardOutput=append:/var/log/ming-tts/official_serve.log
+StandardError=append:/var/log/ming-tts/official_serve.log
 Restart=no
 TimeoutStopSec=20
 

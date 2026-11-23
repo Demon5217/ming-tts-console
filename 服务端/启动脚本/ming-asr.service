@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 User=root
 Environment=PYTHONUNBUFFERED=1
+# 按你的环境改：虚拟环境路径与脚本位置（可选组件，不装也不影响主流程）
 ExecStart=/opt/asr-venv/bin/python /opt/asr-scripts/asr_server.py 8011
 Restart=always
 RestartSec=3

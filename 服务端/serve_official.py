@@ -19,8 +19,13 @@ import tempfile
 import threading
 import time
 
-sys.path.insert(0, "/opt/ming-official")
-os.chdir("/opt/ming-official")
+# 模型代码目录与模型权重目录：默认按官方部署结构，可用环境变量覆盖
+APP_DIR = os.environ.get("MING_APP_DIR") or "/opt/ming-official"
+MODEL_DIR = os.environ.get("MING_MODEL_DIR") or "/opt/models/Ming-3.0-tts-0.5B"
+
+sys.path.insert(0, APP_DIR)
+if os.path.isdir(APP_DIR):
+    os.chdir(APP_DIR)
 
 import numpy as np
 import torch
@@ -30,7 +35,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from ming_tts import MingTTS
 
-MODEL_DIR = "/opt/models/Ming-3.0-tts-0.5B"
 TOK_PER_SEC = 12.5        # 实测：输出 token 数 ≈ 时长 × 12.5
 CHARS_PER_SEC = 4.5       # 普通话平均 4.5 字/秒
 GOOD_RMS_DB = -35.0       # 低于此判为近乎静音
