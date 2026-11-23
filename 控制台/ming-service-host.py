@@ -46,6 +46,10 @@ ASR_UNIT = "ming-asr"
 ASR_PORT = int(os.environ.get("MING_ASR_PORT") or 8011)
 # 最近一次 ASR 启动失败的原因（给页面 hover 与 /status 用；成功即清空）
 _asr_error = ""
+# 巡检间隔（秒）；WSL 空闲会把 distro 里的服务清掉，所以要定期补拉
+ASR_WATCH_SEC = int(os.environ.get("MING_ASR_WATCH_SEC") or 60)
+# 管家退出中：巡检线程看到它就不再拉起 ASR，避免和 atexit 的 stop 打架
+_shutting_down = False
 # 发行版名可配置：启动脚本 config.cmd 里设置 MING_WSL_DISTRO，未设置时用默认值
 DISTRO = os.environ.get("MING_WSL_DISTRO") or "Ubuntu-22.04"
 # Windows 走 WSL 执行 shell；Linux 直接本地 bash
@@ -256,6 +260,48 @@ def stop_asr():
     say("已停 ASR（%d）" % ASR_PORT)
 
 
+def asr_watch():
+    """后台巡检：ASR 掉了就重新拉起。
+
+    为什么需要这一段：WSL 在没有活跃会话时会把 distro 里的进程（含 systemd 服务）
+    一起清掉，下个会话进来才重新起 init。只靠管家启动时拉一次，空闲一会儿 ASR 就没了，
+    页面上灯变红、生成后的 ASR 复核和音色库自动转写都会失效。
+
+    这里先用纯 socket 探端口（不碰 WSL、不唤醒 VM），只有真掉了才去唤醒并拉起。
+    """
+    global _asr_error
+    if (os.environ.get("MING_ASR_WATCH") or "").strip().lower() in ("0", "off", "no", "false"):
+        say("ASR 巡检已按 MING_ASR_WATCH 关闭")
+        return
+    try:
+        if not has_asr_unit():
+            say("未部署 %s，ASR 巡检不启用（可选组件）" % ASR_UNIT)
+            return
+    except Exception:
+        return
+    fails = 0
+    while not _shutting_down:
+        # 连续失败时把间隔拉长，别每分钟都去戳一次 WSL
+        time.sleep(ASR_WATCH_SEC * (4 if fails >= 3 else 1))
+        if _shutting_down:
+            return
+        try:
+            if asr_active():
+                fails = 0
+                continue
+            if fails >= 3:
+                fails = 0
+                continue
+            say("巡检发现 ASR 不在（%d），重新拉起…" % ASR_PORT)
+            if start_asr():
+                fails = 0
+            else:
+                fails += 1
+        except Exception as e:
+            fails += 1
+            say("ASR 巡检异常：%s" % e)
+
+
 def stop_engine(name):
     if name in ("official", "all"):
         sh("systemctl stop ming-official 2>/dev/null || true")
@@ -407,6 +453,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def _on_exit():
     """管家退出时把 ASR 一起带走（强杀走不到这里，由「停止.cmd」兜底）。"""
+    global _shutting_down
+    _shutting_down = True
     try:
         stop_asr()
     except Exception:
@@ -426,8 +474,9 @@ if __name__ == "__main__":
             pass
 
     say("服务管家已启动，端口 %d（页面同端口）" % PORT)
-    # ASR 在后台线程里拉起来，页面不等它暖机
+    # ASR 在后台线程里拉起来，页面不等它暖机；再由巡检线程兜住 WSL 空闲后的掉线
     threading.Thread(target=start_asr, daemon=True).start()
+    threading.Thread(target=asr_watch, daemon=True).start()
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     if "--open" in sys.argv:
         threading.Timer(0.8, lambda: webbrowser.open("http://127.0.0.1:%d/%s" % (PORT, PAGE))).start()
