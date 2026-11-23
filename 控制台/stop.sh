@@ -15,6 +15,13 @@ cd "$HERE"
 : "${MING_HOST_PORT:=8766}"
 
 PIDFILE="$HERE/.ming-host.pid"
+PORTFILE="$HERE/.ming-host.port"
+
+# 端口优先以启动时记下的为准，这样 stop.sh 不必再带一次 MING_HOST_PORT
+if [ -f "$PORTFILE" ]; then
+  RECORDED="$(tr -d '[:space:]' <"$PORTFILE" 2>/dev/null || true)"
+  [ -n "$RECORDED" ] && MING_HOST_PORT="$RECORDED"
+fi
 
 # 按端口找监听进程并杀掉：fuser 优先，退到 lsof，再退到 ss（容器里常见没有前两个）
 kill_by_port() {
@@ -54,7 +61,7 @@ if [ "$STOPPED" -eq 0 ]; then
   kill_by_port "$MING_HOST_PORT" && echo "已按端口停掉管家" || echo "端口 ${MING_HOST_PORT} 上没有监听进程"
 fi
 
-rm -f "$PIDFILE"
+rm -f "$PIDFILE" "$PORTFILE"
 
 if [ "${1:-}" = "--all" ]; then
   echo "停止引擎 …"

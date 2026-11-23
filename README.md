@@ -133,7 +133,7 @@ cd ming-tts-console
 
 `官方 /start` 前会检查磁盘余量（低于 2GB 直接中止）；两个引擎启动前都会先检查前置条件——快速模式要求 `MING_SERVICE_ROOT/start_ming.sh` 存在，完整模式要求 `systemctl` 可用、systemd 真在运行（容器里通常是 `offline`）、且 `systemctl cat ming-official` 能查到 unit——任一不满足立即返回错误，不会白等到超时。
 
-`stop.sh` 按 `.ming-host.pid` 停；pid 不存在（手工启动）或已过期时会退化为按端口找监听进程（`fuser` → `lsof` → `ss`），避免留下孤儿进程。
+`start.sh` 会把实际用的端口写进 `.ming-host.port`，`stop.sh` 优先读这个记录，所以临时用 `MING_HOST_PORT=xxxx ./start.sh` 启动后，直接 `./stop.sh` 也能停对端口；pid 不存在（手工启动）或已过期时会退化为按端口找监听进程（`fuser` → `lsof` → `ss`），避免留下孤儿进程。已在运行时再执行 `start.sh` 会复用原实例，并以记录里的端口为准。
 
 ## 已知限制
 

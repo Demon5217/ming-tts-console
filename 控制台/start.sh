@@ -17,6 +17,7 @@ cd "$HERE"
 : "${MING_HOST_PORT:=8766}"
 
 PIDFILE="$HERE/.ming-host.pid"
+PORTFILE="$HERE/.ming-host.port"
 LOG="$HERE/.ming-host.log"
 URL="http://127.0.0.1:${MING_HOST_PORT}/ming-console.html"
 
@@ -28,11 +29,16 @@ fi
 
 # 已有实例就先收掉，避免端口占用
 if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
-  echo "[1/3] 管家已在运行（pid $(cat "$PIDFILE")），复用"
+  # 复用时以记下的端口为准，避免你这次传的端口和实际在跑的不一致
+  [ -f "$PORTFILE" ] && MING_HOST_PORT="$(cat "$PORTFILE")"
+  URL="http://127.0.0.1:${MING_HOST_PORT}/ming-console.html"
+  echo "[1/3] 管家已在运行（pid $(cat "$PIDFILE")，端口 ${MING_HOST_PORT}），复用"
 else
   echo "[1/3] 启动服务管家（端口 ${MING_HOST_PORT}）…"
   nohup "$PYTHON_BIN" "$HERE/ming-service-host.py" >"$LOG" 2>&1 &
   echo $! >"$PIDFILE"
+  # 记下实际端口，stop.sh 就不依赖你启动时用的环境变量
+  echo "$MING_HOST_PORT" >"$PORTFILE"
 fi
 
 # 等端口通

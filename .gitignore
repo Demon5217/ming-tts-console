@@ -14,6 +14,7 @@
 
 # Linux 入口的运行时文件
 .ming-host.pid
+.ming-host.port
 .ming-host.log
 
 # 本地备份
