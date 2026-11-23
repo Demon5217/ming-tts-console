@@ -1,0 +1,2962 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Ming 语音控制台</title>
+<style>
+  :root{
+    /* 深色工作台风：底色更沉、面板分层、青色只做"当前状态"强调 */
+    --bg:#0a0e13; --bg2:#0d1218;
+    --panel:#121922; --panel2:#18212c; --panel3:#1f2a36;
+    --line:#25303d; --line2:#33404f;
+    --text:#e9f0f7; --text2:#c2cedb; --muted:#8797a8;
+    --accent:#2bb3aa; --accent2:#41cbc1; --accent-dim:rgba(43,179,170,.14);
+    --warn:#e0a33e; --err:#e2605a; --ok:#4fc08a;
+    --r:8px; --r-sm:6px; --r-lg:12px;
+    --mono:Consolas,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html{color-scheme:dark}
+  body{
+    margin:0;background:
+      radial-gradient(1200px 500px at 12% -10%,rgba(43,179,170,.09),transparent 60%),
+      linear-gradient(180deg,var(--bg2),var(--bg) 400px);
+    color:var(--text);font-size:14px;line-height:1.55;
+    font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:rgba(43,179,170,.28)}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#2b3745;border-radius:6px;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:#3a4a5c;background-clip:content-box}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  /* ---------- 顶栏 ---------- */
+  header{
+    display:flex;align-items:center;gap:14px;padding:10px 22px;
+    background:rgba(10,14,19,.82);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;
+  }
+  header h1{font-size:15px;margin:0;font-weight:700;letter-spacing:.6px;color:var(--text)}
+  header h1 span{color:var(--accent);font-weight:600}
+  .pill{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);
+    background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:3px 10px}
+  .dot{width:7px;height:7px;border-radius:50%;background:#5a6a7a;transition:.2s}
+  .dot.ok{background:var(--ok);box-shadow:0 0 8px rgba(79,192,138,.75)}
+  .dot.err{background:var(--err);box-shadow:0 0 8px rgba(226,96,90,.75)}
+  .dot.wait{background:var(--warn);box-shadow:0 0 8px rgba(224,163,62,.6)}
+
+  /* ---------- 主布局（单列流程，具体见文件末尾的「单列流程」段） ---------- */
+
+  /* ---------- 卡片 ---------- */
+  .card{
+    background:linear-gradient(180deg,var(--panel),#10161e);
+    border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:16px 16px 14px;box-shadow:0 1px 0 rgba(255,255,255,.02) inset,0 8px 24px rgba(0,0,0,.22);
+  }
+  .card.flat{box-shadow:none}
+  .card h2{
+    font-size:12px;margin:0 0 12px;color:var(--muted);font-weight:650;
+    letter-spacing:1.2px;text-transform:uppercase;display:flex;align-items:center;gap:8px;
+  }
+  .card h2::before{content:"";width:3px;height:12px;border-radius:2px;background:var(--accent);opacity:.7}
+  .card h2 small{text-transform:none;letter-spacing:0;font-weight:400;font-size:12px;color:#6c7d8f}
+  .subhead{font-size:12px;color:var(--muted);margin:16px 0 8px;padding-top:12px;border-top:1px dashed var(--line)}
+
+  /* ---------- 表单控件 ---------- */
+  textarea{
+    width:100%;height:230px;resize:vertical;background:var(--panel2);color:var(--text);
+    border:1px solid var(--line);border-radius:var(--r);padding:12px;font-size:14px;
+    line-height:1.8;font-family:inherit;transition:border-color .15s,box-shadow .15s;
+  }
+  textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+  .field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:110px}
+  .field label{font-size:11.5px;color:var(--muted);letter-spacing:.2px}
+  select,input[type=text],input[type=number]{
+    background:var(--panel2);color:var(--text);border:1px solid var(--line);
+    border-radius:var(--r-sm);padding:7px 9px;font-size:13px;font-family:inherit;width:100%;
+    transition:border-color .15s,box-shadow .15s;
+  }
+  input::placeholder,textarea::placeholder{color:#5d6d7e}
+  textarea::selection{background:rgba(43,179,170,.3)}
+  select:focus,input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+  select:disabled,input:disabled{opacity:.5;cursor:not-allowed}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  input[type=file]{font-size:12px;color:var(--muted)}
+  input[type=file]::file-selector-button{
+    background:var(--panel2);color:var(--text2);border:1px solid var(--line);border-radius:5px;
+    padding:5px 10px;margin-right:8px;font-size:12px;cursor:pointer
+  }
+  button{
+    background:var(--accent);color:#04120f;border:none;border-radius:var(--r-sm);
+    padding:8px 16px;font-size:13px;font-weight:650;cursor:pointer;font-family:inherit;
+    transition:background .15s,transform .06s,box-shadow .15s;
+  }
+  button:hover{background:var(--accent2)}
+  button:active{transform:translateY(1px)}
+  button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-dim)}
+  button:disabled{background:#2a3440;color:#687686;cursor:not-allowed;transform:none}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--text2);font-weight:500}
+  button.ghost:hover{border-color:var(--accent);color:var(--accent2);background:transparent}
+  button.danger{background:transparent;border:1px solid var(--line);color:var(--muted);font-weight:500;padding:4px 10px}
+  button.danger:hover{border-color:var(--err);color:var(--err)}
+  #go{padding:10px 26px;font-size:14px;box-shadow:0 4px 14px rgba(43,179,170,.22)}
+  kbd{font-family:var(--mono);font-size:11px;background:var(--panel3);border:1px solid var(--line2);
+    border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--text2)}
+
+  /* ---------- 文本 / 提示 ---------- */
+  .counter{font-size:12px;color:var(--muted);margin-top:8px;display:flex;justify-content:space-between;gap:10px}
+  audio{width:100%;margin-top:10px;height:38px;border-radius:var(--r);background:var(--panel2)}
+  .meta{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.9}
+  .meta b{color:var(--text);font-weight:600}
+  .hint{font-size:12px;color:var(--muted);line-height:1.75;margin-top:8px}
+  .hint b{color:var(--text2);font-weight:600}
+  .tag{display:inline-block;font-size:11px;padding:1px 6px;border:1px solid var(--line);border-radius:4px;color:var(--muted);margin-left:6px}
+  .badge{font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--muted);margin-left:6px}
+  .badge.on{border-color:var(--accent);color:var(--accent2);background:var(--accent-dim)}
+
+  /* ---------- 日志 ---------- */
+  .log{
+    margin-top:10px;background:#070a0e;border:1px solid var(--line);border-radius:var(--r);
+    padding:10px;height:150px;overflow-y:auto;font-size:12px;color:var(--muted);
+    font-family:var(--mono);line-height:1.7;
+  }
+  .log .e{color:var(--err)}.log .s{color:var(--ok)}.log .w{color:var(--warn)}
+
+  /* ---------- 表格 ---------- */
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tbody tr:hover{background:rgba(255,255,255,.02)}
+  th{color:var(--muted);font-weight:500;font-size:11.5px;letter-spacing:.3px;text-transform:uppercase}
+  td{color:var(--text2)}
+
+  /* ---------- 进度 / 标签按钮 / 分段 ---------- */
+  .progress{height:4px;background:var(--line);border-radius:3px;margin-top:12px;overflow:hidden;display:none}
+  .progress>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .25s}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .tags button{
+    background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    font-weight:500;font-size:12px;padding:3px 9px;border-radius:20px;
+  }
+  .tags button:hover{border-color:var(--accent);color:var(--accent2);background:var(--accent-dim)}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--panel2)}
+  .seg button{border:none;border-radius:0;background:transparent;color:var(--muted);font-weight:500;padding:7px 14px;font-size:13px}
+  .seg button.on{background:var(--accent);color:#04120f;font-weight:650}
+  .seg button + button{border-left:1px solid var(--line)}
+
+  /* 参数网格：比 flex 一行更整齐，窄屏自动折行 */
+  .grid7{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px 12px;align-items:end;margin-top:11px}
+  .grid7 .field{min-width:0;max-width:300px}
+
+  /* ---------- 步骤条 ---------- */
+  .steps{display:flex;align-items:center;gap:8px;margin:0 0 2px;flex-wrap:wrap}
+  .steps .step{display:flex;align-items:center;gap:7px;font-size:12px;color:#6c7d8f;padding:3px 10px;border-radius:20px;border:1px solid transparent}
+  .steps .step b{display:grid;place-items:center;width:17px;height:17px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);font-size:11px;font-weight:600;color:var(--muted)}
+  .steps .step.on{color:var(--accent2);background:var(--accent-dim);border-color:rgba(43,179,170,.32)}
+  .steps .step.on b{background:var(--accent);border-color:var(--accent);color:#04120f}
+  .steps .sep{color:#3a4a5c;font-size:11px}
+
+  /* ---------- 折叠（高级参数 / 日志等） ---------- */
+  details.card > summary{
+    list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;
+    font-size:12px;color:var(--muted);font-weight:650;letter-spacing:1.2px;text-transform:uppercase;
+    user-select:none;
+  }
+  details.card > summary::-webkit-details-marker{display:none}
+  details.card > summary::before{content:"";width:3px;height:12px;border-radius:2px;background:var(--accent);opacity:.7}
+  details.card > summary::after{content:"展开";margin-left:auto;font-size:11px;color:#6c7d8f;letter-spacing:0;text-transform:none;font-weight:400}
+  details.card[open] > summary::after{content:"收起"}
+  details.card[open] > summary{margin-bottom:14px;color:var(--text2)}
+  details.card > summary:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-dim);border-radius:6px}
+
+  /* ---------- 结果区 ---------- */
+  .result-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .result-wave{height:56px;border-radius:var(--r);background:
+      repeating-linear-gradient(90deg,rgba(43,179,170,.22) 0 2px,transparent 2px 6px);
+    border:1px solid var(--line);opacity:.85;margin-top:10px}
+
+  /* ---------- 浮层提示 ---------- */
+  #toast{
+    position:fixed;right:20px;bottom:48px;z-index:60;display:flex;flex-direction:column;gap:8px;
+    pointer-events:none;
+  }
+  #toast .t{
+    background:#101822;border:1px solid var(--line2);border-left:3px solid var(--accent);
+    color:var(--text);padding:9px 14px;border-radius:var(--r);font-size:12.5px;
+    box-shadow:0 10px 30px rgba(0,0,0,.45);max-width:420px;animation:tin .18s ease-out;
+  }
+  #toast .t.err{border-left-color:var(--err)}
+  #toast .t.ok{border-left-color:var(--ok)}
+  #toast .t.warn{border-left-color:var(--warn)}
+  @keyframes tin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  /* ---------- 单列流程 / 引擎条 ---------- */
+  body{padding-bottom:40px}
+  main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.06fr);gap:16px;
+       max-width:1360px;margin:0 auto;padding:14px 22px 36px;align-items:start}
+  @media(max-width:1080px){main{display:flex;flex-direction:column;padding:12px}}
+  main.narrow{display:flex;flex-direction:column;max-width:900px;gap:12px}
+  .col{min-width:0;display:flex;flex-direction:column;gap:14px}
+  textarea{height:190px}
+  /* 可展开块：做成有边框、有底色的“工具条”，和普通内容区分开 */
+  details.sub, #reqbox{
+    margin-top:14px;border:1px solid var(--line);border-radius:10px;
+    background:rgba(255,255,255,.022);overflow:hidden;
+  }
+  details.sub > summary, #reqbox > summary{
+    display:flex;align-items:center;gap:9px;cursor:pointer;list-style:none;
+    padding:10px 13px;user-select:none;
+    font-size:13px;font-weight:600;color:var(--text2);letter-spacing:.2px;
+    background:linear-gradient(180deg, rgba(43,179,170,.09), rgba(43,179,170,.02));
+    border-left:3px solid rgba(43,179,170,.55);
+  }
+  details.sub > summary::-webkit-details-marker, #reqbox > summary::-webkit-details-marker{display:none}
+  details.sub > summary::before, #reqbox > summary::before{
+    content:"";flex:0 0 auto;width:0;height:0;
+    border-left:6px solid var(--accent2);border-top:4px solid transparent;border-bottom:4px solid transparent;
+    transition:transform .16s ease;
+  }
+  details.sub[open] > summary::before, #reqbox[open] > summary::before{transform:rotate(90deg)}
+  details.sub > summary::after, #reqbox > summary::after{
+    content:"展开";margin-left:auto;font-size:11px;font-weight:400;color:#6c7d8f;letter-spacing:0;
+  }
+  details.sub[open] > summary::after, #reqbox[open] > summary::after{content:"收起"}
+  details.sub[open] > summary, #reqbox[open] > summary{
+    color:var(--text);border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(43,179,170,.14), rgba(43,179,170,.03));
+  }
+  details.sub > summary:hover, #reqbox > summary:hover{background:linear-gradient(180deg, rgba(43,179,170,.16), rgba(43,179,170,.04))}
+  details.sub > summary:focus-visible, #reqbox > summary:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--accent-dim)}
+  /* 展开后的内容统一左右缩进，跟标题对齐 */
+  details.sub[open] > *:not(summary), #reqbox[open] > *:not(summary){padding-left:13px;padding-right:13px}
+  details.sub[open] > *:not(summary):last-child, #reqbox[open] > *:not(summary):last-child{padding-bottom:12px}
+  /* 音色来源在任务卡里不再需要虚线分隔 */
+  #voicesrc{margin-top:10px}
+  /* IP 两步选：先点属性标签，再点角色，最后点情绪 */
+  .ipfilterline{display:flex;gap:9px;align-items:center;margin-top:9px}
+  .ipseg{display:flex;flex-wrap:wrap;gap:6px}
+  .ipseg button{
+    padding:4px 10px;border-radius:7px;border:1px solid var(--line);background:var(--panel2);
+    color:var(--muted);font-size:12px;cursor:pointer;line-height:1.35;
+  }
+  .ipseg button:hover{color:var(--text);border-color:rgba(43,179,170,.45)}
+  .ipseg button.on{background:var(--accent-dim);border-color:rgba(43,179,170,.55);color:var(--accent2);font-weight:600}
+  .ipchips{display:flex;flex-wrap:wrap;gap:6px;max-height:168px;overflow:auto;padding:1px 2px}
+  .ipchip{
+    padding:4px 10px;border-radius:7px;border:1px solid var(--line);background:var(--panel2);
+    color:var(--text2);font-size:12px;cursor:pointer;line-height:1.35;
+  }
+  .ipchip:hover{border-color:rgba(43,179,170,.45);color:var(--text)}
+  .ipchip.on{background:var(--accent-dim);border-color:rgba(43,179,170,.6);color:var(--accent2);font-weight:600}
+  .segscroll{max-height:210px;overflow:auto}
+  .card h2 .num{
+    display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;
+    width:18px;height:18px;border-radius:50%;background:var(--accent-dim);
+    border:1px solid rgba(43,179,170,.4);color:var(--accent2);
+    font-size:11px;font-weight:700;letter-spacing:0;margin-right:2px;
+  }
+  .engrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .engspacer{flex:1;min-width:8px}
+  .minilab{font-size:11.5px;color:var(--muted);white-space:nowrap;letter-spacing:.2px}
+  button.sm{padding:5px 11px;font-size:12px}
+  .engconfirm{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;
+    padding:8px 12px;border:1px solid var(--line2);border-left:3px solid var(--warn);
+    background:#151d26;border-radius:8px;font-size:12.5px;color:var(--text2);
+  }
+  [hidden]{display:none!important}
+  .engconfirm[hidden]{display:none}
+  .engconfirm button{padding:5px 12px;font-size:12px}
+
+  /* ---------- 任务 chips / 参数隐藏 ---------- */
+  .taskrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .taskchips{display:flex;flex-wrap:wrap;gap:6px}
+  .tchip{
+    background:transparent;border:1px solid var(--line);color:var(--muted);
+    padding:5px 11px;border-radius:999px;font-size:12.5px;font-weight:500;
+    transition:border-color .15s,color .15s,background .15s;
+  }
+  .tchip:hover{color:var(--text2);border-color:var(--line2);background:transparent}
+  .tchip.on{background:var(--accent-dim);border-color:var(--accent);color:var(--accent2);font-weight:650}
+  .hiddenselect{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px}
+  .field.hide{display:none!important}
+  .instrwrap{margin-top:12px}
+  .instrwrap .minilab{display:block;margin-bottom:6px}
+  #instrwrap.hide{display:none}
+  #vdgen[hidden]{display:none}
+  #vdgen{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+
+  /* ---------- 底部状态栏 / 日志浮层 ---------- */
+  #statusbar{
+    position:fixed;left:0;right:0;bottom:0;height:34px;display:flex;align-items:center;
+    gap:14px;padding:0 16px;background:rgba(10,14,19,.94);backdrop-filter:blur(10px);
+    border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);z-index:40;
+  }
+  #statusbar .sb-item{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+  #statusbar .sb-grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  #statusbar .sb-warn{color:var(--warn)}
+  #logpanel{
+    position:fixed;right:16px;bottom:42px;width:min(560px,48vw);height:340px;
+    background:#0e141b;border:1px solid var(--line2);border-radius:10px;
+    box-shadow:0 18px 44px rgba(0,0,0,.55);z-index:50;
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  #logpanel[hidden]{display:none}
+  #histpanel{
+    position:fixed;right:16px;bottom:42px;width:min(620px,52vw);max-height:340px;
+    background:#0e141b;border:1px solid var(--line2);border-radius:10px;
+    box-shadow:0 18px 44px rgba(0,0,0,.55);z-index:50;
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  #histpanel[hidden]{display:none}
+  .histbody{padding:2px 10px 8px;overflow:auto}
+  .loghead{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:7px 10px;border-bottom:1px solid var(--line);font-size:12px;color:var(--text2);
+  }
+  .loghead button{background:transparent;border:none;color:var(--muted);font-size:15px;padding:0 6px;cursor:pointer}
+  .loghead button:hover{background:transparent;color:var(--text)}
+  #logpanel .log{margin:0;border:none;border-radius:0;height:auto;flex:1;overflow:auto}
+
+  /* ---------- 音色库二级视图 ---------- */
+  .voicehead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:2px 2px 0}
+  .voicehead h2{font-size:16px;margin:0;color:var(--text)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Ming <span>语音控制台</span></h1>
+  <span class="pill"><span class="dot" id="odot"></span><span id="otext">完整模式…</span></span>
+  <span class="pill"><span class="dot" id="hdot"></span><span id="htext">快速模式…</span></span>
+  <span class="pill" id="modelpill"></span>
+  <span class="hint" style="margin:0 auto 0 6px;font-size:11.5px;white-space:nowrap">
+    <kbd>Ctrl</kbd> + <kbd>Enter</kbd> 生成 · <kbd>Esc</kbd> 停止
+  </span>
+  <button id="openVoice" class="ghost sm">音色库</button>
+</header>
+
+<div id="toast"></div>
+
+<div id="viewConsole">
+<main>
+  <div class="col">
+  <!-- ① 引擎：先定用哪套 -->
+  <div class="card">
+    <h2><span class="num">1</span>引擎与模式 <small>先决定用哪套模型，再谈怎么说</small></h2>
+    <div class="engrow">
+      <span class="minilab">引擎</span>
+      <div class="seg" id="engseg">
+        <button type="button" data-e="official">完整模式</button>
+        <button type="button" data-e="fast">快速模式</button>
+      </div>
+      <button id="bStop" class="ghost sm" hidden>■ 停止服务</button>
+      <div class="engspacer"></div>
+      <button id="bRefresh" class="ghost sm">刷新状态</button>
+    </div>
+    <div class="engrow" id="langfield" style="margin-top:11px" hidden>
+      <span class="minilab">语言</span>
+      <select id="lang" style="max-width:180px">
+        <option value="Auto">Auto</option>
+        <option value="Chinese">Chinese</option>
+        <option value="English">English</option>
+      </select>
+      <span class="hint" style="margin:0;flex:1;min-width:160px">快速模式专用：告诉它这段稿子是什么语言</span>
+    </div>
+    <div id="engconfirm" class="engconfirm" hidden>
+      <span id="engconfirmText"></span>
+      <button id="engconfirmGo">现在启动</button>
+      <button id="engconfirmNo" class="ghost">取消</button>
+    </div>
+
+    <div class="engrow" id="modefield" style="margin-top:11px">
+      <span class="minilab">合成模式</span>
+      <div class="seg" id="modeseg">
+        <button type="button" data-m="clone">clone · 求音色像</button>
+        <button type="button" data-m="style">style · 求方言情绪</button>
+      </div>
+      <span class="hint" style="margin:0;flex:1;min-width:180px" id="modehint"></span>
+    </div>
+    <div hidden><button id="bStartOff"></button><button id="bStartFast"></button><button id="bStopAll"></button></div>
+  </div>
+
+  <!-- ② 任务与音色 -->
+  <div class="card">
+    <h2><span class="num">2</span>任务与音色 <small>谁在说、怎么说</small></h2>
+    <div class="taskrow">
+      <span class="minilab">任务类型</span>
+      <div class="taskchips" id="taskchips"></div>
+      <select id="task" class="hiddenselect" tabindex="-1" aria-hidden="true">
+        <option value="TTS">TTS</option>
+        <option value="BASIC">BASIC</option>
+        <option value="EMOTION">EMOTION</option>
+        <option value="DIALECT">DIALECT</option>
+        <option value="FREEFORM">FREEFORM</option>
+        <option value="VOICE_DESIGN">VOICE_DESIGN</option>
+        <option value="IP">IP</option>
+      </select>
+    </div>
+
+    <div class="grid7" id="offctl">
+      <div class="field">
+        <label>语速</label>
+        <select id="ctlSpeed"><option>慢速</option><option selected>中速</option><option>快速</option></select>
+      </div>
+      <div class="field">
+        <label>音高</label>
+        <select id="ctlPitch"><option>低</option><option selected>中</option><option>高</option></select>
+      </div>
+      <div class="field">
+        <label>音量</label>
+        <select id="ctlVolume"><option>低</option><option selected>中</option><option>高</option></select>
+      </div>
+      <div class="field">
+        <label>情绪</label>
+        <select id="ctlEmotion">
+          <option value="中性" selected>中性</option>
+          <option value="高兴">高兴</option>
+          <option value="悲伤">悲伤</option>
+          <option value="愤怒">愤怒</option>
+          <option value="恐惧">恐惧</option>
+          <option value="厌恶">厌恶</option>
+          <option value="惊讶">惊讶</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>方言</label>
+        <select id="ctlDialect">
+          <option value="cantonese" selected>粤语</option>
+          <option value="chuanyu dialect">川渝</option>
+        </select>
+      </div>
+      <div class="field">
+        <label title="日/韩/德/法/西需要参考音频；选中后走 MULTILINGUAL">目标语言</label>
+        <select id="langId">
+          <option value="">中文（默认）</option>
+          <option value="en">英语 en</option>
+          <option value="ja">日语 ja</option>
+          <option value="ko">韩语 ko</option>
+          <option value="de">德语 de</option>
+          <option value="fr">法语 fr</option>
+          <option value="es">西班牙语 es</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="instrwrap" id="instrwrap">
+      <label class="minilab" id="instrlabel">自由指令</label>
+      <input type="text" id="instr" placeholder="例如：用撒娇的口气、声音压低一点带鼻音">
+      <div class="tags" id="instrbar" style="margin-top:7px"></div>
+    </div>
+
+    <div class="hint" id="taskhint" style="margin-top:8px"></div>
+    <div class="hint" id="taskhidehint" style="margin-top:2px"></div>
+
+    <div id="vdgen" hidden>
+      <div class="row">
+        <div class="field"><label>性别</label>
+          <select id="gdSex"><option>女性</option><option>男性</option><option>女童</option><option>男童</option></select></div>
+        <div class="field"><label>年龄</label>
+          <select id="gdAge"><option>青少年</option><option>青年</option><option>中年</option><option>中老年</option><option>老年</option><option>儿童</option></select></div>
+        <div class="field"><label>音高</label>
+          <select id="gdPitch"><option>低沉中音</option><option>清亮中高音</option><option>清亮童声高音</option><option>醇厚低音</option></select></div>
+        <div class="field"><label>语速</label>
+          <select id="gdSpeed"><option>节奏明快，富有活力</option><option>节奏中等，自然匀速</option><option>节奏舒缓，从容不迫</option><option>语速极慢，一字一句</option></select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>音量</label>
+          <select id="gdVol"><option>声音清晰响亮</option><option>音量适中</option><option>音量偏低，贴近耳语</option></select></div>
+        <div class="field"><label>清晰度</label>
+          <select id="gdClarity"><option>吐字清晰，发音圆润</option><option>吐字利落，颗粒感强</option><option>略带含糊，生活化</option></select></div>
+        <div class="field"><label>流畅度</label>
+          <select id="gdFluency"><option>表达流利，一气呵成</option><option>平稳陈述，节奏均匀</option><option>停顿较多，带思考感</option></select></div>
+        <div class="field"><label>口音</label>
+          <select id="gdAccent"><option>标准普通话</option><option>标准普通话，播音腔</option><option>轻微南方口音</option><option>轻微北方口音</option><option>带港台腔</option></select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>音色质感</label>
+          <select id="gdTimbre"><option>音色温暖磁实</option><option>音色沙哑低沉</option><option>音色纯净甜美</option><option>音色清透干净</option><option>气声明显，贴耳质感</option><option>音色明亮干脆</option></select></div>
+        <div class="field"><label>情绪</label>
+          <select id="gdEmo"><option>平静克制</option><option>活泼喜悦</option><option>温柔关切</option><option>冷静客观</option><option>悲伤低落</option><option>紧张恐惧</option></select></div>
+        <div class="field"><label>语调</label>
+          <select id="gdTone"><option>语调平稳</option><option>语调生动上扬</option><option>句尾下压</option><option>句尾轻挑</option></select></div>
+        <div class="field"><label>性格</label>
+          <select id="gdChar"><option>沉稳自信</option><option>外向开朗</option><option>知性温和</option><option>疏离高冷</option><option>天真烂漫</option></select></div>
+      </div>
+      <div class="row">
+        <button type="button" class="ghost" id="vdgenGo">生成音色描述并填入</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer" title="英文模型训练时用的是 id/speaker/dialect/style/… 这套字段名，做英文音色设计更贴训练分布">
+          <input type="checkbox" id="vdEn"> 英文字段（instruction_schema=en）
+        </label>
+      </div>
+    </div>
+
+    <details id="voicesrc" class="sub" open>
+      <summary><span>音色来源</span><small id="voicesrcHint">参考音频在「音色库」里管，这里只选用哪个</small></summary>
+      <div class="row">
+        <div class="field" style="flex:1 1 200px">
+          <label>音色</label>
+          <select id="voice"><option value="default">default（内置）</option></select>
+        </div>
+        <div class="field" style="flex:1 1 240px">
+          <label title="spk 每次读音频算嵌入、不读逐字稿；prompt 系列每次要读音频+逐字稿">音色路径</label>
+          <select id="refMode">
+            <option value="spk" selected>纯净音色嵌入（推荐：开头稳、不吃逐字稿）</option>
+            <option value="prompt_emb">参考音频提示 + 音色嵌入（官方零样本克隆，最像）</option>
+            <option value="prompt">参考音频提示（仅音频+逐字稿，偶发噪音）</option>
+          </select>
+        </div>
+        <div class="field" style="flex:0 0 auto;min-width:0">
+          <label>&nbsp;</label>
+          <button id="openVoice2" class="ghost">管理音色库</button>
+        </div>
+      </div>
+      <div class="hint" id="refStatus" style="margin-top:6px">—</div>
+      <div class="hint" id="voicesrcNote" style="margin-top:2px"></div>
+    </details>
+
+    <div id="ipblock" hidden>
+      <div class="subhead">内置音色 / 角色 <small>只在 IP 任务下出现，点标签一步步筛，最后点角色定音色</small></div>
+      <div class="ipfilterline"><span class="minilab">性别</span><div class="ipseg" id="ipSexSeg" data-key="sex">
+        <button type="button" data-v="" class="on">全部</button>
+        <button type="button" data-v="f">女性</button>
+        <button type="button" data-v="m">男性</button>
+      </div></div>
+      <div class="ipfilterline"><span class="minilab">年龄</span><div class="ipseg" id="ipAgeSeg" data-key="age">
+        <button type="button" data-v="" class="on">全部</button>
+        <button type="button" data-v="kid">儿童</button>
+        <button type="button" data-v="teen">少年</button>
+        <button type="button" data-v="adult">成年</button>
+      </div></div>
+      <div class="ipfilterline"><span class="minilab">语言</span><div class="ipseg" id="ipLangSeg" data-key="lang">
+        <button type="button" data-v="" class="on">全部</button>
+        <button type="button" data-v="zh">中文</button>
+        <button type="button" data-v="en">英文</button>
+      </div></div>
+      <div class="ipfilterline"><span class="minilab">情绪</span><div class="ipseg" id="ipMoodSeg" data-key="mood">
+        <button type="button" data-v="" class="on">全部</button>
+        <button type="button" data-v="中性">中性</button>
+        <button type="button" data-v="悲伤">悲伤</button>
+        <button type="button" data-v="高兴">高兴</button>
+        <button type="button" data-v="生气">生气</button>
+        <button type="button" data-v="厌恶">厌恶</button>
+        <button type="button" data-v="恐惧">恐惧</button>
+        <button type="button" data-v="惊讶">惊讶</button>
+      </div></div>
+      <div class="ipfilterline" style="align-items:flex-start"><span class="minilab">角色</span>
+        <div class="ipchips" id="ipCharChips"></div>
+      </div>
+      <div class="ipfilterline" id="ipMoodLine" hidden style="align-items:flex-start"><span class="minilab">变体</span>
+        <div class="ipchips" id="ipMoodChips"></div>
+      </div>
+      <select id="ipVoice" hidden><option value="">不使用内置音色</option></select>
+      <div class="hint" id="ipCount" style="margin-top:8px">—</div>
+    </div>
+    <div class="hint" id="fastNote" hidden>快速模式：只吃「语速」和文内标签，任务类型 / 情绪 / 方言 / 参考音频都不参与。</div>
+
+    <details class="sub">
+      <summary>高级生成参数 <small style="text-transform:none;letter-spacing:0;font-weight:400">进阶 · 先用默认</small></summary>
+      <div class="row">
+        <div class="field">
+          <label title="越大越严格照着指令/描述生成；太小会自由发挥">听话程度 cfg</label>
+          <select id="advCfg">
+            <option value="1.5">1.5 · 放松</option>
+            <option value="2.0" selected>2.0 · 标准（默认）</option>
+            <option value="3.0">3.0 · 严格</option>
+            <option value="4.0">4.0 · 极严格</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>噪声幅度 sigma <span id="sigval">0.25</span></label>
+          <input type="range" id="advSigma" min="0.1" max="0.6" step="0.05" value="0.25">
+        </div>
+        <div class="field">
+          <label>采样温度 temperature <span id="tmval">0.00</span></label>
+          <input type="range" id="advTemp" min="0" max="1" step="0.05" value="0">
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer" title="关掉后不再裁掉句尾的静音，叹气、尾音拖长会更完整">
+          <input type="checkbox" id="advTrim" checked> 句尾静音裁剪
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer" title="音色设计/自由指令长文被切成多段时，用第 1 段的结果当后面每段的参考，避免越念越不像">
+          <input type="checkbox" id="advReuse" checked> 多段复用第 1 段音色
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer" title="生成后用本机 ASR 复核念出来的字，不对就换种子重跑，拦掉「全是噪音」的坏样本；每段多花约 2 秒">
+          <input type="checkbox" id="advVerify" checked> ASR 内容校验（防噪音）
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer" title="benchmark 写法：整段直送、不切分不归一化，长文会退化，只在单句对照时用">
+          <input type="checkbox" id="advRaw"> 整段直送（raw_text）
+        </label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div class="field">
+          <label>段间静音（秒）</label>
+          <select id="advGap">
+            <option value="0.2">0.20 · 紧凑（对话）</option>
+            <option value="0.35" selected>0.35 · 标准</option>
+            <option value="0.5">0.50 · 旁白感</option>
+            <option value="0.8">0.80 · 大留白</option>
+          </select>
+        </div>
+        <div class="field">
+          <label title="按标点切段的目标字数；调小停顿更多、更像对话，调大连贯、适合旁白">分段字数 max_length</label>
+          <select id="advSplit">
+            <option value="12">12 · 短句（停顿多）</option>
+            <option value="16">16 · 偏短</option>
+            <option value="24" selected>24 · 官方默认</option>
+            <option value="32">32 · 偏长</option>
+            <option value="40">40 · 长句连贯</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="spkGo" class="ghost">提取并缓存说话人嵌入</button>
+        <button id="spkSave" class="ghost" disabled>导出 .pt</button>
+        <button id="spkLoad" class="ghost">导入 .pt</button>
+        <input type="file" id="spkFile" accept=".pt" style="display:none">
+      </div>
+      <span class="hint" style="margin:0" id="spkhint">把当前参考音色压成一个小文件，之后每段不用重新编码（多语言长文提速明显）。</span>
+    </details>
+  </div>
+  </div>
+
+  <div class="col">
+  <!-- ③ 文稿与生成 -->
+  <div class="card">
+    <h2><span class="num">3</span>文稿与生成</h2>
+    <div class="tags" id="tplbar" style="margin-bottom:8px"></div>
+    <textarea id="input" placeholder="在这里粘贴要合成的文字……&#10;支持中英文，长文可开启下方「自动分段」拼接成一条。&#10;想要笑声/叹气/呼吸等效果，把光标放好后点下面的标签按钮。"></textarea>
+    <div class="tags" id="tagbar"></div>
+    <div class="counter">
+      <span id="count">0 字</span>
+      <span id="est"></span>
+    </div>
+    <div class="hint" id="segprev" style="margin-top:2px"></div>
+
+    <div class="grid7">
+      <div class="field">
+        <label>格式</label>
+        <select id="format">
+          <option value="wav">wav</option>
+          <option value="mp3">mp3</option>
+          <option value="flac">flac</option>
+          <option value="opus">opus</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>语速 <span id="speedval">1.00</span>x</label>
+        <input type="range" id="speed" min="0.5" max="2" step="0.05" value="1">
+      </div>
+      <div class="field">
+        <label>随机种子（留空=随机）</label>
+        <input type="number" id="seed" placeholder="如 12345">
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer" title="模型对 10 字以内的输入很容易退化成底噪，把短句并入相邻句能彻底绕开">
+        <input type="checkbox" id="mergeshort" checked> 短句自动并入相邻句
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer" title="生成后立刻检测音量和时长，不正常就换个随机种子重来">
+        <input type="checkbox" id="smartretry" checked> 失败自动换种子重试
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer" title="仅用参考音频的音色特征，不要求逐字稿；短句成功率更高，音色细腻度略降">
+        <input type="checkbox" id="xvecfallback" checked> 失败用「仅音色」兜底
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer">
+        <input type="checkbox" id="autosplit" checked> 长文自动分段
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer">
+        <input type="checkbox" id="autosave" checked> 生成后自动下载
+      </label>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <button id="go">生成语音</button>
+      <button id="stop" class="ghost" disabled>停止</button>
+      <button id="clear" class="ghost">清空文本</button>
+    </div>
+    <div class="progress" id="prog"><i></i></div>
+    <details id="reqbox" style="margin-top:10px">
+      <summary style="font-size:12px;color:var(--muted);cursor:pointer">查看本次请求（真正送给模型的内容 · 排查用）</summary>
+      <pre id="reqjson" style="margin:8px 0 0;font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-all;color:var(--muted);max-height:240px;overflow:auto">还没有请求</pre>
+    </details>
+
+    <details class="sub">
+      <summary>批量长文导出 <small style="text-transform:none;letter-spacing:0;font-weight:400">一行 = 一个文件 · 用当前音色和设置</small></summary>
+      <div class="row">
+        <div class="field" style="flex:1">
+          <label>稿件（回车换行 = 切分点）</label>
+          <textarea id="batchText" style="min-height:100px" placeholder="第一章 清晨，他推开窗……&#10;第二章 那天雨下得很大……&#10;（一行生成一个 wav）"></textarea>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>文件名前缀</label>
+          <input type="text" id="batchName" placeholder="ming_batch">
+        </div>
+        <div class="field" style="flex:1">
+          <label>&nbsp;</label>
+          <button id="batchGo" class="ghost">开始批量生成</button>
+        </div>
+      </div>
+      <span class="hint" style="margin:0" id="bathint">每条单独下载为「前缀_序号.wav」，播放器和历史只保留最后一条。</span>
+    </details>
+  </div>
+
+  <!-- 结果 -->
+  <div class="card">
+    <h2>结果 <small id="resbadge"></small></h2>
+    <audio id="player" controls></audio>
+    <div class="meta" id="meta">还没有生成结果。</div>
+    <div class="row">
+      <button id="dl" class="ghost" disabled>下载保存</button>
+      <span class="hint" style="margin:0">浏览器只能存到「下载」文件夹，想放项目里就手动移一下。</span>
+    </div>
+
+    <div class="subhead">分段（逐段试听 / 单段重生）</div>
+    <div class="segscroll">
+      <table>
+        <thead><tr><th>段</th><th>时长</th><th>音量</th><th>像不像</th><th style="width:140px"></th></tr></thead>
+        <tbody id="seglist"><tr><td colspan="5" style="color:var(--muted)">还没有分段结果</td></tr></tbody>
+      </table>
+    </div>
+    <span class="hint" style="margin:0" id="seghint">生成后这里会列出每一段，哪段糊了就单独重生，自动按段间静音重新拼回整条。</span>
+
+    <details class="sub">
+      <summary>A/B 对比 <small style="text-transform:none;letter-spacing:0;font-weight:400">同一句话 · 两套设置各出一版</small></summary>
+      <div class="row">
+        <div class="field">
+          <label>B 组任务</label>
+          <select id="abTask">
+            <option value="TTS">TTS · 普通合成</option>
+            <option value="BASIC">BASIC · 语速/音高/音量</option>
+            <option value="EMOTION">EMOTION · 情绪</option>
+            <option value="DIALECT">DIALECT · 方言</option>
+            <option value="FREEFORM">FREEFORM · 自由指令</option>
+            <option value="VOICE_DESIGN">VOICE_DESIGN · 音色设计</option>
+            <option value="IP">IP · 角色</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>B 组内置音色</label>
+          <select id="abVoice"><option value="">不用（沿用 A 的参考音色）</option></select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field" style="flex:1">
+          <label>B 组指令 / 描述（留空则沿用 A 的）</label>
+          <input type="text" id="abInstr" placeholder="例如：用低沉沙哑的老年男声，语速很慢">
+        </div>
+      </div>
+      <div class="row">
+        <button id="abGo" class="ghost">生成 A/B 对比</button>
+        <span class="hint" style="margin:0" id="abhint">A 用当前设置，B 用这一组，正文同一段。</span>
+      </div>
+      <div class="row" style="align-items:flex-start">
+        <div class="field" style="flex:1"><label>A · 当前设置</label><audio id="abA" controls></audio></div>
+        <div class="field" style="flex:1"><label>B · 对比设置</label><audio id="abB" controls></audio></div>
+      </div>
+    </details>
+  </div>
+  </div>
+</main>
+</div>
+
+<!-- 二级视图：音色库 -->
+<div id="viewVoice" hidden>
+<main class="narrow">
+  <div class="voicehead">
+    <button id="backConsole" class="ghost sm">← 返回控制台</button>
+    <h2>本地音色库</h2>
+    <span class="hint" style="margin:0">只存这台电脑，不传给任何服务</span>
+  </div>
+
+  <div class="card">
+    <h2>新建音色</h2>
+    <div class="row">
+      <div class="field">
+        <label>音色名称</label>
+        <input type="text" id="vname" placeholder="比如 我的声音">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>参考音频（wav/mp3/m4a，10–20 秒最佳）</label>
+        <input type="file" id="vfile" accept="audio/*">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>参考音频的逐字稿（必须与音频完全一致，否则开头会乱码）</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="vref" placeholder="一字不差地填参考音频里说的话" style="flex:1">
+          <button id="vrefAsr" type="button" title="调用本机 ASR 识别参考音频，自动填进逐字稿，并用于合成前校验">按音频自动转写</button>
+        </div>
+        <span class="hint" style="margin:6px 0 0">合成前会自动比对「逐字稿 vs 音频识别结果」，差异过大直接拦下，避免开头串成参考音频的内容。</span>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="upload">保存到本地音色库</button>
+      <span class="hint" style="margin:0">保存时自动转成 44.1kHz 单声道，重启浏览器依然在。</span>
+    </div>
+    <div class="hint">音色路径（spk / prompt）在控制台第 ② 块里选——它决定每次生成读不读参考音频和逐字稿。</div>
+  </div>
+
+  <div class="card">
+    <h2>已保存的音色 <small id="vcount" style="color:#6c7d8f"></small></h2>
+    <table>
+      <thead><tr><th>名称</th><th>参考时长</th><th style="width:200px"></th></tr></thead>
+      <tbody id="vlist"><tr><td colspan="3" style="color:var(--muted)">加载中…</td></tr></tbody>
+    </table>
+    <div class="hint">点「用」直接切到控制台当前音色；删掉不会影响已生成的文件。</div>
+  </div>
+</main>
+</div>
+
+<footer id="statusbar">
+  <span class="sb-item"><span class="dot" id="sbDot"></span><span id="sbState">引擎检测中…</span></span>
+  <span class="sb-item sb-grow" id="svchint" title="">服务管家：检测中…</span>
+  <span class="sb-item" id="sbTask">任务 TTS</span>
+  <button id="histBtn" class="ghost sm">历史</button>
+  <button id="logBtn" class="ghost sm">日志</button>
+</footer>
+
+<div id="histpanel" hidden>
+  <div class="loghead"><span>生成历史 · 本次会话（最多 20 条）</span><button id="histClose" title="关闭">×</button></div>
+  <div class="histbody">
+    <table>
+      <thead><tr><th>时间</th><th>设置</th><th style="width:170px"></th></tr></thead>
+      <tbody id="hlist"><tr><td colspan="3" style="color:var(--muted)">还没有生成记录</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="logpanel" hidden>
+  <div class="loghead"><span>运行日志</span><button id="logClose" title="关闭">×</button></div>
+  <div class="log" id="log"></div>
+</div>
+<script>
+const API = 'http://127.0.0.1:8000';
+const OFF = 'http://127.0.0.1:8010';
+const $ = id => document.getElementById(id);
+let lastBlob = null, lastUrl = null, lastMeta = '', aborter = null, cancelled = false;
+let engine = 'official', mode = 'clone', offOk = false, fastOk = false;
+let lastEngineUi = null;   // 只在引擎真正切换时重跑 applyTask，避免每次轮询重绘预设
+let enginePicked = false;  // 用户手动点过引擎 tab 后，不再自动跟随存活状态
+
+function log(msg, cls){
+  const el = $('log');
+  const t = new Date().toLocaleTimeString('zh-CN',{hour12:false});
+  const line = document.createElement('div');
+  if(cls) line.className = cls;
+  line.textContent = `[${t}] ${msg}`;
+  el.appendChild(line); el.scrollTop = el.scrollHeight;
+  while(el.childNodes.length > 300) el.removeChild(el.firstChild);
+}
+
+function setHealth(state, text){
+  $('hdot').className = 'dot ' + state;
+  $('htext').textContent = text;
+}
+
+async function checkHealth(){
+  try{
+    const t0 = performance.now();
+    const r = await fetch(API + '/health', {cache:'no-store'});
+    const ms = Math.round(performance.now()-t0);
+    if(r.ok){ setHealth('ok', `快速模式 · 正常 ${ms}ms`); fastOk = true; }
+    else { setHealth('err', `快速模式 · 返回 ${r.status}`); fastOk = false; }
+  }catch(e){
+    setHealth('err', '快速模式 · 未启动');
+    fastOk = false;
+  }
+  syncEngineLock();
+}
+
+async function checkOfficial(){
+  try{
+    const t0 = performance.now();
+    const r = await fetch(OFF + '/health', {cache:'no-store'});
+    const ms = Math.round(performance.now()-t0);
+    const j = r.ok ? await r.json() : null;
+    if(j && j.model_loaded){
+      $('odot').className = 'dot ok';
+      $('otext').textContent = `完整模式 · 就绪 · 显存 ${j.vram_mb}MB`;
+      offOk = true;
+    }else{
+      $('odot').className = 'dot wait';
+      $('otext').textContent = '完整模式 · 加载中…';
+      offOk = false;
+    }
+  }catch(e){
+    $('odot').className = 'dot err';
+    $('otext').textContent = '完整模式 · 未启动';
+    offOk = false;
+  }
+  syncEngineLock();
+}
+
+function updateGoState(){
+  const ready = engine === 'official' ? offOk : fastOk;
+  $('go').disabled = !ready;
+}
+
+/* ---------- 引擎 / 模式切换 ---------- */
+const MODE_HINT = {
+  clone: 'clone：参考音频 + 逐字稿，音色最像你；方言/情绪控制偏弱，适合日常配音。',
+  style: 'style：只用说话人特征、不传逐字稿；方言和情绪更听得出来，但音色比 clone 松散。',
+};
+
+/* 6GB 显存只能跑一套，但两个 tab 都保持可点：
+   点未启动的那个会弹确认条，确认后由管家自动停掉另一套再拉起。 */
+const LOCK_ENGINE_WHEN_SINGLE = false;
+
+function syncEngineLock(){
+  const btnOff = document.querySelector('#engseg button[data-e="official"]');
+  const btnFast = document.querySelector('#engseg button[data-e="fast"]');
+  if(!btnOff || !btnFast) return;
+
+  if(!LOCK_ENGINE_WHEN_SINGLE){
+    btnOff.disabled = btnFast.disabled = false;
+    /* 只在一开始、用户还没手动选过时，跟着实际存活的那套走 */
+    if(!enginePicked && offOk !== fastOk) engine = offOk ? 'official' : 'fast';
+    applyEngine(); return;
+  }
+
+  if(offOk && !fastOk){            // 只有完整模式在跑
+    engine = 'official';
+    btnOff.disabled = false; btnFast.disabled = true;
+    btnFast.title = '完整模式占用显存，先点「启动快速模式」会自动切过去';
+  }else if(fastOk && !offOk){      // 只有快速模式在跑
+    engine = 'fast';
+    btnFast.disabled = false; btnOff.disabled = true;
+    btnOff.title = '快速模式占用显存，先点「启动完整模式」会自动切过去';
+  }else{                            // 都没起 或 都在（未来双开）
+    btnOff.disabled = false; btnFast.disabled = false;
+    btnOff.title = ''; btnFast.title = '';
+  }
+  applyEngine();
+}
+
+function engineName(e){ return e === 'official' ? '完整模式' : '快速模式'; }
+function engineReady(e){ return e === 'official' ? offOk : fastOk; }
+
+function applyEngine(){
+  [...document.querySelectorAll('#engseg button')].forEach(b=>{
+    b.classList.toggle('on', b.dataset.e === engine);
+  });
+  const ready = engineReady(engine);
+  $('modefield').style.display = engine === 'official' ? '' : 'none';
+  $('offctl').style.display = engine === 'official' ? '' : 'none';
+  $('langfield').hidden = engine === 'official';
+  const iw = $('instrwrap');
+  /* 快速模式整块没有任务参数；完整模式交给 applyTask 按任务决定显示 */
+  if(iw && engine !== 'official') iw.classList.add('hide');
+  if(engine !== 'official'){
+    if($('voicesrc')) $('voicesrc').style.display = 'none';
+    if($('ipblock')) $('ipblock').hidden = true;
+  }
+  const tr = document.querySelector('.taskrow');
+  const isOff = engine === 'official';
+  if(tr) tr.style.display = isOff ? '' : 'none';
+  ['taskhint','taskhidehint'].forEach(id=>{ const el = $(id); if(el) el.style.display = isOff ? '' : 'none'; });
+  if($('vdgen')) $('vdgen').style.display = (isOff && $('task').value === 'VOICE_DESIGN') ? '' : 'none';
+  if($('fastNote')) $('fastNote').hidden = engine === 'official';
+  $('modehint').textContent = engine === 'official' ? MODE_HINT[mode] : '快速模式：SGLang 服务，只有语速和内联标签生效。';
+  if($('bStop')) $('bStop').hidden = !(offOk || fastOk);
+  if($('sbState')) $('sbState').textContent = engineName(engine) + (ready ? ' · 就绪' : ' · 未启动');
+  if($('sbDot')) $('sbDot').className = 'dot ' + (ready ? 'ok' : 'err');
+  syncFastLangField();
+  updateGoState();
+  if(engine === 'official' && lastEngineUi !== 'official') applyTask();
+  lastEngineUi = engine;
+}
+
+/* 点引擎 tab 只切换；没启动就弹出确认条，点了「现在启动」才真的拉起 */
+function showEngConfirm(){
+  const box = $('engconfirm'); if(!box) return;
+  if(engineReady(engine)){ box.hidden = true; return; }
+  const nm = engineName(engine);
+  $('engconfirmText').textContent = `${nm}还没启动。冷启动约 20–60 秒，这段时间显存只够跑这一套，现在启动吗？`;
+  box.hidden = false;
+}
+
+/* 「语言」只在快速模式用得上（完整模式走任务里的「目标语言」），完整模式下整项隐去 */
+function syncFastLangField(){
+  const sel = $('lang'), box = $('langfield');
+  if(!sel || !box) return;
+  const isFast = engine !== 'official';
+  box.hidden = !isFast;
+  sel.disabled = !isFast;
+}
+
+function applyMode(){
+  [...document.querySelectorAll('#modeseg button')].forEach(b=>{
+    b.classList.toggle('on', b.dataset.m === mode);
+  });
+  applyEngine();
+}
+
+document.querySelectorAll('#engseg button').forEach(b=>{
+  b.onclick = ()=>{
+    engine = b.dataset.e; enginePicked = true; applyEngine(); showEngConfirm();
+    log('切换到 ' + engineName(engine) + (engineReady(engine) ? '（已就绪）' : '（未启动）'));
+  };
+});
+$('engconfirmGo').onclick = ()=>{
+  $('engconfirm').hidden = true;
+  hostCall('/start?engine=' + engine, '启动' + engineName(engine));
+};
+$('engconfirmNo').onclick = ()=>{ $('engconfirm').hidden = true; };
+$('bStop').onclick = ()=>{
+  if(!confirm('停止服务？完整模式和快速模式会一起停（6GB 显存只够跑一套）。')) return;
+  hostCall('/stop?engine=all', '停止服务');
+};
+document.querySelectorAll('#modeseg button').forEach(b=>{
+  b.onclick = ()=>{ mode = b.dataset.m; applyMode(); log('合成模式 ' + mode); };
+});
+
+/* ---------- 本地音色库（IndexedDB，全部存在本机） ---------- */
+let db = null;
+function openDB(){
+  return new Promise((res,rej)=>{
+    const rq = indexedDB.open('ming_tts_local', 2);
+    rq.onupgradeneeded = ()=>{
+      const d = rq.result;
+      if(!d.objectStoreNames.contains('voices')) d.createObjectStore('voices', {keyPath:'name'});
+      if(!d.objectStoreNames.contains('history')) d.createObjectStore('history', {keyPath:'id'});
+    };
+    rq.onsuccess = ()=> res(rq.result);
+    rq.onerror = ()=> rej(rq.error);
+  });
+}
+function store(mode){ return db.transaction('voices', mode).objectStore('voices'); }
+function hstore(mode){ return db.transaction('history', mode).objectStore('history'); }
+function histAll(){ return new Promise((res,rej)=>{ const r=hstore('readonly').getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error); }); }
+function histPut(v){ return new Promise((res,rej)=>{ const r=hstore('readwrite').put(v); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+function histDel(id){ return new Promise((res,rej)=>{ const r=hstore('readwrite').delete(id); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+function histClear(){ return new Promise((res,rej)=>{ const r=hstore('readwrite').clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+function idbAll(){ return new Promise((res,rej)=>{ const r=store('readonly').getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error); }); }
+function idbGet(name){ return new Promise((res,rej)=>{ const r=store('readonly').get(name); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+function idbPut(v){ return new Promise((res,rej)=>{ const r=store('readwrite').put(v); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+function idbDel(name){ return new Promise((res,rej)=>{ const r=store('readwrite').delete(name); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
+
+async function loadVoices(){
+  try{
+    if(!db) db = await openDB();
+    const voices = await idbAll();
+    const sel = $('voice');
+    const cur = sel.value;
+    sel.innerHTML = '<option value="default">default（内置）</option>';
+    voices.forEach(v=>{
+      const o = document.createElement('option');
+      o.value = 'local:' + v.name;
+      o.textContent = v.name + '（本地）';
+      sel.appendChild(o);
+    });
+    if(cur && [...sel.options].some(o=>o.value===cur)) sel.value = cur;
+    if($('vcount')) $('vcount').textContent = voices.length ? `(${voices.length})` : '';
+    const tb = $('vlist');
+    tb.innerHTML = '';
+    if(!voices.length){
+      tb.innerHTML = '<tr><td colspan="3" style="color:var(--muted)">还没有本地音色</td></tr>';
+      return;
+    }
+    voices.forEach(v=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${v.name}</td><td>${v.seconds.toFixed(1)}s</td><td></td>`;
+      const td = tr.lastElementChild;
+      const use = document.createElement('button');
+      use.className = 'danger'; use.textContent = '用';
+      use.title = '设成控制台当前音色';
+      use.onclick = ()=>{
+        const sel = $('voice');
+        sel.value = 'local:' + v.name;
+        renderRefStatus();
+        location.hash = '#/';
+        log('当前音色 → ' + v.name);
+      };
+      const prev = document.createElement('button');
+      prev.className = 'danger'; prev.textContent = '试听'; prev.style.marginLeft = '4px';
+      prev.onclick = ()=>{
+        const url = URL.createObjectURL(new Blob([v.wav], {type:'audio/wav'}));
+        const a = new Audio(url);
+        a.onended = ()=>URL.revokeObjectURL(url);
+        a.play();
+        log('试听本地音色 ' + v.name);
+      };
+      const b = document.createElement('button');
+      b.className='danger'; b.textContent='删除'; b.style.marginLeft = '4px';
+      b.onclick = async()=>{
+        if(!confirm(`删除本地音色 ${v.name}？`)) return;
+        await idbDel(v.name); log('已删除本地音色 '+v.name); loadVoices();
+        if($('voice').value === 'local:' + v.name) $('voice').value = 'default';
+        renderRefStatus();
+      };
+      td.appendChild(use); td.appendChild(prev); td.appendChild(b); tb.appendChild(tr);
+    });
+  }catch(e){ log('读取本地音色失败: '+e.message,'e'); }
+}
+
+async function loadModel(){
+  try{
+    const r = await fetch(API + '/v1/models');
+    const j = await r.json();
+    const id = j.data[0].id.split('/').pop();
+    $('modelpill').textContent = '模型 ' + id;
+  }catch(e){}
+}
+
+/* ---------- 文本处理 ---------- */
+const VOICE_DATA = [
+  ['灵小安','灵小安 · 女性/少女 · 智能语音助手 / 游戏向导 / ','声线甜美清脆，带有标志性的二次元“萌系”特征，语气充满活力与亲和力，展现出随时待'],
+  ['灵语汐','灵语汐 · 女性/少女 · 调皮妹妹、可爱少女','充满朝气的少女音，音色清脆明亮，展现出阳光活力的形象。'],
+  ['灵小萌','灵小萌 · 女性/青年 · 有声读物中的旁白、治愈系电台主播','声音清脆明亮，语速干练爽利，听感元气且可靠。'],
+  ['灵小柔','灵小柔 · 女性/青年 · 智能语音客服助手 / 电话交互系','声音清亮甜美，发音清晰标准，语调中带有礼貌的询问感，展现出耐心专业的服务态度。'],
+  ['灵小雅','灵小雅 · 女性/青年 · 新闻播报员、有声书博主','元气满满的甜美少女音，音色清脆明亮'],
+  ['花小呗','花小呗 · 女性/少女 · 客服、儿童','声音清脆甜美，带有明显的幼态特征，语调轻快活泼'],
+  ['灵韵','灵韵 · 女性/青年 · 客服','声音清脆明亮，语速干练爽利，听感元气且可靠。'],
+  ['妩媚妲己','妩媚妲己 · 女性/青年 · 妩媚角色','声音甜美清脆，语调轻盈上扬，表现性感妩媚'],
+  ['灵婉','灵婉 · 女性/少女 · 有声书旁白','清澈甜美的少女声线，充满亲密感与治愈力。'],
+  ['灵小月','灵小月 · 女性/青年 · 邻家女孩','声音清甜且充满元气，语调轻快洋溢着迎接朋友的喜悦，展现出极具感染力的青春气息。'],
+  ['灵朵儿','灵朵儿 · 女性/青年 · 情感电台主播、有声书讲述者、文化','声音温润如玉，兼具知性与亲和力，如同一位优雅的智者在午后娓娓道来，充满治愈力量。'],
+  ['灵小锋','灵小锋 · 男性/青年 · 贴心的男友、可靠的同事、现代剧男','富有磁性的温暖男声，语气自然笃定，既有邻家大男孩的亲切，又不失成熟男性的稳重感。'],
+  ['灵小川','灵小川 · 男性/青年 · 电台情感主播、美食/香水鉴赏家、','富有磁性的治愈系青年男声，嗓音温暖醇厚，在表达感官体验时语调深情细腻，极具感染力'],
+  ['灵小甄','灵小甄 · 女性/青年 · 电商带货主播 / 时尚博主。','声音明亮清脆，语速轻快且充满活力，语气中带有强烈的推荐感和亲和力，典型的带货主播'],
+  ['灵小知','灵小知 · 女性/青年 · 广告配音员 / 品牌推荐官 / ','一位干练自信的职场女性声音，音色明亮清脆，语语气铿锵有力，具有极强的商业说服力和'],
+  ['灵小惠','灵小惠 · 女性/青年 · 美妆类电商带货女主播','语速极快且穿透力强的电商主播音，充满紧迫感与热情，在制造抢购氛围的同时透着专业干'],
+  ['灵小晴','灵小晴 · 女性/青年 · 电商带货女主播','语速极快且清晰的职业带货主播音，充满爆发力与紧迫感，擅长用高亢明亮的声线瞬间点燃'],
+  ['灵小琪','灵小琪 · 男性/青年 · 美食博主、好物推荐官、热心的朋友','充满阳光活力的青年男声，语气亲切自然，带有强烈的分享欲和种草感，听感清爽舒适，极'],
+  ['灵梦','灵梦 · 女性/青年 · 热恋中的女友、可爱的邻家妹妹、二','充满糖分的高甜少女音，语气娇憨任性，完美演绎了想要人陪伴时的撒娇状态。'],
+  ['灵恬','灵恬 · 女性/青年 · 热恋中的女友、乙女游戏女主角、正','嗓音如蜜糖般甜美，透着一丝娇嗔与笃定的深情，充满了恋爱中的少女气息。'],
+  ['灵小汐','灵小汐 · 女性/青年 · 邻家女孩、初恋女友、可爱的学妹','清澈甜美的少女音色，语气自然松弛，充满生活气息，透着一股无辜与可爱的亲切感。'],
+  ['灵小棠','灵小棠 · 女性/青年 · 旅行博主、有着丰富留学/游历经验','声音清澈温暖，语调舒缓从容，自带南方女子的温婉气质，充满生活阅历带来的故事感与亲'],
+  ['灵小梨','灵小梨 · 女性/青年 · 旅游博主、情感电台主持人、文艺少','声音清甜透亮，如同江南水乡的微风，既有少女的灵动俏皮，又蕴含着温婉深情的叙述感。'],
+  ['灵小芸','灵小芸 · 女性/青年 · 情感电台主播、知心闺蜜、播客主持','温暖知性的年轻女性声音，如同闺蜜般真诚分享生活感悟，语气平和细腻，具有抚慰人心的'],
+  ['灵空','灵空 · 男性/青年 · 异地恋男友、深情的恋人、年上的照','低沉磁性的嗓音如同暖流，带有明显的贴耳气声，充满了无限的宠溺与安抚感，令人心安。'],
+  ['灵宇','灵宇 · 男性/青年 · 乙女游戏男主角、校园风云人物、偶','充满磁性的青年公子音，语气中带着自信的笑意与轻微的戏谑，听感温柔且极具撩拨感。'],
+  ['灵朗','灵朗 · 男/青年 · 完美男友、年轻有为的企业高管（霸','充满磁性的低沉嗓音，语气中融合了自信的笑意与深情的宠溺，极具苏感与安全感。'],
+  ['灵楷','灵楷 · 男性/青年 · 电台情感主播、城市漫游者、纪录片','富有磁性的青年男声，如深夜电台般温暖治愈，用慢节奏的叙述抚平都市的喧嚣与匆忙。'],
+  ['灵旭','灵旭 · 男性/青年 · 学生、校友、年轻的讲故事的人、深','声音清澈干净，富有少年感和书卷气。语调平缓温和，如同邻家学长在午后阳光下娓娓道来'],
+  ['灵江','灵江 · 男性/青年 · 电台情感主播、回忆录叙述者、或是','充满磁性的温暖男声，语调舒缓深情，如同老友般讲述着关于青春与热爱的无悔回忆。'],
+  ['悲伤女声','悲伤女声 · 女性/青年 · 寻求改变的都市白领、情感类电台主','富有故事感的都市知性女声，温柔中透着坚定的力量，像是在深夜里低声诉说心事，极具情'],
+  ['皮六','皮六 · 男性/青年 · 广告旁白、故事解说者、或者是拥有','充满朝气与自信的青年男声，音质明亮干脆，语气中带有强烈的对比感与戏剧张力，极具煽'],
+  ['悟空','悟空 · 男性/青年 · 说书人、讲故事的旁白、相声演员','声音极具表现力和画面感，语气夸张而不失分寸，善于用声音演戏，像一位眉飞色舞的讲故'],
+  ['灵晓声_惊讶','灵晓声_惊讶 · 男性 · 惊讶','霸道总裁、豪门贵公子、自信的追求 / 惊讶'],
+  ['灵晓声_厌恶','灵晓声_厌恶 · 男性 · 厌恶','霸道总裁、豪门贵公子、自信的追求 / 厌恶'],
+  ['灵晓声_高兴','灵晓声_高兴 · 男性 · 高兴','霸道总裁、豪门贵公子、自信的追求 / 高兴'],
+  ['灵晓声_中性','灵晓声_中性 · 男性 · 中性','霸道总裁、豪门贵公子、自信的追求 / 中性'],
+  ['灵晓声_悲伤','灵晓声_悲伤 · 男性 · 悲伤','霸道总裁、豪门贵公子、自信的追求 / 悲伤'],
+  ['灵风信_生气','灵风信_生气 · 女性 · 生气','贴心女友、青梅竹马、邻家妹妹 / 生气'],
+  ['灵风信_中性','灵风信_中性 · 女性 · 中性','贴心女友、青梅竹马、邻家妹妹 / 中性'],
+  ['灵风信_厌恶','灵风信_厌恶 · 女性 · 厌恶','贴心女友、青梅竹马、邻家妹妹 / 厌恶'],
+  ['灵风信_高兴','灵风信_高兴 · 女性 · 高兴','贴心女友、青梅竹马、邻家妹妹 / 高兴'],
+  ['灵风信_悲伤','灵风信_悲伤 · 女性 · 悲伤','贴心女友、青梅竹马、邻家妹妹 / 悲伤'],
+  ['灵惜梦_中性','灵惜梦_中性 · 女性 · 中性','闺蜜、年轻女店主、姐姐 / 中性'],
+  ['灵惜梦_厌恶','灵惜梦_厌恶 · 女性 · 厌恶','闺蜜、年轻女店主、姐姐 / 厌恶'],
+  ['灵惜梦_高兴','灵惜梦_高兴 · 女性 · 高兴','闺蜜、年轻女店主、姐姐 / 高兴'],
+  ['灵惜梦_悲伤','灵惜梦_悲伤 · 女性 · 悲伤','闺蜜、年轻女店主、姐姐 / 悲伤'],
+  ['灵惜梦_恐惧','灵惜梦_恐惧 · 女性 · 恐惧','闺蜜、年轻女店主、姐姐 / 恐惧'],
+  ['灵惜梦_惊讶','灵惜梦_惊讶 · 女性 · 惊讶','闺蜜、年轻女店主、姐姐 / 惊讶'],
+  ['灵惜梦_生气','灵惜梦_生气 · 女性 · 生气','闺蜜、年轻女店主、姐姐 / 生气'],
+  ['灵逸风_悲伤','灵逸风_悲伤 · 男性 · 悲伤','大学生、年轻弟弟、被叫去帮忙的闲 / 悲伤'],
+  ['灵逸风_惊讶','灵逸风_惊讶 · 男性 · 惊讶','大学生、年轻弟弟、被叫去帮忙的闲 / 惊讶'],
+  ['灵逸风_中性','灵逸风_中性 · 男性 · 中性','大学生、年轻弟弟、被叫去帮忙的闲 / 中性'],
+  ['灵逸风_恐惧','灵逸风_恐惧 · 男性 · 恐惧','大学生、年轻弟弟、被叫去帮忙的闲 / 恐惧'],
+  ['灵逸风_高兴','灵逸风_高兴 · 男性 · 高兴','大学生、年轻弟弟、被叫去帮忙的闲 / 高兴'],
+  ['灵悦澜_中性','灵悦澜_中性 · 女性 · 中性','游戏玩伴、网络主播、亲密好友 / 中性'],
+  ['灵悦澜_高兴','灵悦澜_高兴 · 女性 · 高兴','游戏玩伴、网络主播、亲密好友 / 高兴'],
+  ['灵悦澜_厌恶','灵悦澜_厌恶 · 女性 · 厌恶','游戏玩伴、网络主播、亲密好友 / 厌恶'],
+  ['灵悦澜_恐惧','灵悦澜_恐惧 · 女性 · 恐惧','游戏玩伴、网络主播、亲密好友 / 恐惧'],
+  ['灵悦澜_生气','灵悦澜_生气 · 女性 · 生气','游戏玩伴、网络主播、亲密好友 / 生气'],
+  ['灵悦澜_悲伤','灵悦澜_悲伤 · 女性 · 悲伤','游戏玩伴、网络主播、亲密好友 / 悲伤'],
+  ['灵御心_高兴','灵御心_高兴 · 女性 · 高兴','职场新人、年轻白领、或是正在与人 / 高兴'],
+  ['灵御心_中性','灵御心_中性 · 女性 · 中性','职场新人、年轻白领、或是正在与人 / 中性'],
+  ['灵御心_生气','灵御心_生气 · 女性 · 生气','职场新人、年轻白领、或是正在与人 / 生气'],
+  ['灵语恬_高兴','灵语恬_高兴 · 女性 · 高兴','知心姐姐、运势解说员、贴心女友 / 高兴'],
+  ['灵语恬_恐惧','灵语恬_恐惧 · 女性 · 恐惧','知心姐姐、运势解说员、贴心女友 / 恐惧'],
+  ['灵语恬_悲伤','灵语恬_悲伤 · 女性 · 悲伤','知心姐姐、运势解说员、贴心女友 / 悲伤'],
+  ['灵语恬_惊讶','灵语恬_惊讶 · 女性 · 惊讶','知心姐姐、运势解说员、贴心女友 / 惊讶'],
+  ['灵语恬_生气','灵语恬_生气 · 女性 · 生气','知心姐姐、运势解说员、贴心女友 / 生气'],
+  ['灵语恬_中性','灵语恬_中性 · 女性 · 中性','知心姐姐、运势解说员、贴心女友 / 中性'],
+  ['灵心恬_厌恶','灵心恬_厌恶 · 女性 · 厌恶','有声书旁白、案件解说员、新闻播音 / 厌恶'],
+  ['灵心恬_惊讶','灵心恬_惊讶 · 女性 · 惊讶','有声书旁白、案件解说员、新闻播音 / 惊讶'],
+  ['灵心恬_悲伤','灵心恬_悲伤 · 女性 · 悲伤','有声书旁白、案件解说员、新闻播音 / 悲伤'],
+  ['灵心恬_中性','灵心恬_中性 · 女性 · 中性','有声书旁白、案件解说员、新闻播音 / 中性'],
+  ['灵心恬_恐惧','灵心恬_恐惧 · 女性 · 恐惧','有声书旁白、案件解说员、新闻播音 / 恐惧'],
+  ['灵心恬_高兴','灵心恬_高兴 · 女性 · 高兴','有声书旁白、案件解说员、新闻播音 / 高兴'],
+  ['灵心恬_生气','灵心恬_生气 · 女性 · 生气','有声书旁白、案件解说员、新闻播音 / 生气'],
+  ['灵亦尘_中性','灵亦尘_中性 · 男性 · 中性','男友、丈夫、或是关系亲密的男性友 / 中性'],
+  ['灵亦尘_恐惧','灵亦尘_恐惧 · 男性 · 恐惧','男友、丈夫、或是关系亲密的男性友 / 恐惧'],
+  ['灵语尘_高兴','灵语尘_高兴 · 男性 · 高兴','悬疑剧中的关键证人、面临危机的父 / 高兴'],
+  ['灵语尘_厌恶','灵语尘_厌恶 · 男性 · 厌恶','悬疑剧中的关键证人、面临危机的父 / 厌恶'],
+  ['灵语尘_惊讶','灵语尘_惊讶 · 男性 · 惊讶','悬疑剧中的关键证人、面临危机的父 / 惊讶'],
+  ['灵语尘_中性','灵语尘_中性 · 男性 · 中性','悬疑剧中的关键证人、面临危机的父 / 中性'],
+  ['灵语尘_悲伤','灵语尘_悲伤 · 男性 · 悲伤','悬疑剧中的关键证人、面临危机的父 / 悲伤'],
+  ['灵语尘_恐惧','灵语尘_恐惧 · 男性 · 恐惧','悬疑剧中的关键证人、面临危机的父 / 恐惧'],
+  ['灵悦兮_高兴','灵悦兮_高兴 · 女性 · 高兴','准备自驾出游的女友、干练的年轻职 / 高兴'],
+  ['灵悦兮_中性','灵悦兮_中性 · 女性 · 中性','准备自驾出游的女友、干练的年轻职 / 中性'],
+  ['灵悦兮_生气','灵悦兮_生气 · 女性 · 生气','准备自驾出游的女友、干练的年轻职 / 生气'],
+  ['灵悦兮_惊讶','灵悦兮_惊讶 · 女性 · 惊讶','准备自驾出游的女友、干练的年轻职 / 惊讶'],
+  ['灵悦兮_厌恶','灵悦兮_厌恶 · 女性 · 厌恶','准备自驾出游的女友、干练的年轻职 / 厌恶'],
+  ['灵悦兮_悲伤','灵悦兮_悲伤 · 女性 · 悲伤','准备自驾出游的女友、干练的年轻职 / 悲伤'],
+  ['灵悦兮_恐惧','灵悦兮_恐惧 · 女性 · 恐惧','准备自驾出游的女友、干练的年轻职 / 恐惧'],
+  ['灵若虚_惊讶','灵若虚_惊讶 · 女性 · 惊讶','娱乐资讯播音员、纪录片旁白或观察 / 惊讶'],
+  ['灵若虚_中性','灵若虚_中性 · 女性 · 中性','娱乐资讯播音员、纪录片旁白或观察 / 中性'],
+  ['灵若虚_悲伤','灵若虚_悲伤 · 女性 · 悲伤','娱乐资讯播音员、纪录片旁白或观察 / 悲伤'],
+  ['灵若虚_高兴','灵若虚_高兴 · 女性 · 高兴','娱乐资讯播音员、纪录片旁白或观察 / 高兴'],
+  ['灵若虚_厌恶','灵若虚_厌恶 · 女性 · 厌恶','娱乐资讯播音员、纪录片旁白或观察 / 厌恶'],
+  ['灵若虚_生气','灵若虚_生气 · 女性 · 生气','娱乐资讯播音员、纪录片旁白或观察 / 生气'],
+  ['灵未央_高兴','灵未央_高兴 · 女性 · 高兴','元气少女、爱撒娇的女友、活泼的闺 / 高兴'],
+  ['灵未央_中性','灵未央_中性 · 女性 · 中性','元气少女、爱撒娇的女友、活泼的闺 / 中性'],
+  ['灵未央_惊讶','灵未央_惊讶 · 女性 · 惊讶','元气少女、爱撒娇的女友、活泼的闺 / 惊讶'],
+  ['灵未央_悲伤','灵未央_悲伤 · 女性 · 悲伤','元气少女、爱撒娇的女友、活泼的闺 / 悲伤'],
+  ['灵未央_恐惧','灵未央_恐惧 · 女性 · 恐惧','元气少女、爱撒娇的女友、活泼的闺 / 恐惧'],
+  ['灵未央_生气','灵未央_生气 · 女性 · 生气','元气少女、爱撒娇的女友、活泼的闺 / 生气'],
+  ['灵梦瑶_中性','灵梦瑶_中性 · 女性 · 中性','学生、科普讲解员、智能语音助手 / 中性'],
+  ['灵梦瑶_高兴','灵梦瑶_高兴 · 女性 · 高兴','学生、科普讲解员、智能语音助手 / 高兴'],
+  ['灵梦瑶_悲伤','灵梦瑶_悲伤 · 女性 · 悲伤','学生、科普讲解员、智能语音助手 / 悲伤'],
+  ['灵梦瑶_惊讶','灵梦瑶_惊讶 · 女性 · 惊讶','学生、科普讲解员、智能语音助手 / 惊讶'],
+  ['灵梦瑶_生气','灵梦瑶_生气 · 女性 · 生气','学生、科普讲解员、智能语音助手 / 生气'],
+  ['灵妙声_中性','灵妙声_中性 · 男性 · 中性','有声书旁白、语音助手、播音员 / 中性'],
+  ['灵妙声_悲伤','灵妙声_悲伤 · 男性 · 悲伤','有声书旁白、语音助手、播音员 / 悲伤'],
+  ['灵言澈_中性','灵言澈_中性 · 男性 · 中性','贴心男友、邻家哥哥、关心你的挚友 / 中性'],
+  ['灵言澈_高兴','灵言澈_高兴 · 男性 · 高兴','贴心男友、邻家哥哥、关心你的挚友 / 高兴'],
+  ['灵嘉肴_中性','灵嘉肴_中性 · 男性 · 中性','科普博主/商业解说员 / 中性'],
+  ['灵嘉肴_恐惧','灵嘉肴_恐惧 · 男性 · 恐惧','科普博主/商业解说员 / 恐惧'],
+  ['灵孤影_中性','灵孤影_中性 · 男性 · 中性','美食评论家、体贴的伴侣、或是正在 / 中性'],
+  ['灵雨汐_中性','灵雨汐_中性 · 女性 · 中性','甜美系女友、邻家妹妹、乙女游戏/ / 中性'],
+  ['灵雨汐_恐惧','灵雨汐_恐惧 · 女性 · 恐惧','甜美系女友、邻家妹妹、乙女游戏/ / 恐惧'],
+  ['灵雨汐_高兴','灵雨汐_高兴 · 女性 · 高兴','甜美系女友、邻家妹妹、乙女游戏/ / 高兴'],
+  ['灵雨汐_悲伤','灵雨汐_悲伤 · 女性 · 悲伤','甜美系女友、邻家妹妹、乙女游戏/ / 悲伤'],
+  ['灵雨汐_惊讶','灵雨汐_惊讶 · 女性 · 惊讶','甜美系女友、邻家妹妹、乙女游戏/ / 惊讶'],
+  ['灵信远_生气','灵信远_生气 · 男性 · 生气','热恋中的男友、新婚丈夫、乙女游戏 / 生气'],
+  ['灵信远_惊讶','灵信远_惊讶 · 男性 · 惊讶','热恋中的男友、新婚丈夫、乙女游戏 / 惊讶'],
+  ['灵信远_高兴','灵信远_高兴 · 男性 · 高兴','热恋中的男友、新婚丈夫、乙女游戏 / 高兴'],
+  ['灵信远_恐惧','灵信远_恐惧 · 男性 · 恐惧','热恋中的男友、新婚丈夫、乙女游戏 / 恐惧'],
+  ['灵信远_悲伤','灵信远_悲伤 · 男性 · 悲伤','热恋中的男友、新婚丈夫、乙女游戏 / 悲伤'],
+  ['灵思齐_高兴','灵思齐_高兴 · 男性 · 高兴','邻家大哥哥、年轻的父亲、儿童节目 / 高兴'],
+  ['灵思齐_恐惧','灵思齐_恐惧 · 男性 · 恐惧','邻家大哥哥、年轻的父亲、儿童节目 / 恐惧'],
+  ['灵思齐_厌恶','灵思齐_厌恶 · 男性 · 厌恶','邻家大哥哥、年轻的父亲、儿童节目 / 厌恶'],
+  ['灵思齐_惊讶','灵思齐_惊讶 · 男性 · 惊讶','邻家大哥哥、年轻的父亲、儿童节目 / 惊讶'],
+  ['灵思齐_悲伤','灵思齐_悲伤 · 男性 · 悲伤','邻家大哥哥、年轻的父亲、儿童节目 / 悲伤'],
+  ['灵叙柔_高兴','灵叙柔_高兴 · 女性 · 高兴','新闻主播、纪录片旁白、政府/企业 / 高兴'],
+  ['灵叙柔_惊讶','灵叙柔_惊讶 · 女性 · 惊讶','新闻主播、纪录片旁白、政府/企业 / 惊讶'],
+  ['灵绮木_厌恶','灵绮木_厌恶 · 女性 · 厌恶','营养师、健康顾问、药店导购、母婴 / 厌恶'],
+  ['灵绮木_高兴','灵绮木_高兴 · 女性 · 高兴','营养师、健康顾问、药店导购、母婴 / 高兴'],
+  ['灵绮木_生气','灵绮木_生气 · 女性 · 生气','营养师、健康顾问、药店导购、母婴 / 生气'],
+  ['灵渊霆_厌恶','灵渊霆_厌恶 · 男性 · 厌恶','大学同学、舍友、学长 / 厌恶'],
+  ['灵渊霆_恐惧','灵渊霆_恐惧 · 男性 · 恐惧','大学同学、舍友、学长 / 恐惧'],
+  ['灵渊霆_惊讶','灵渊霆_惊讶 · 男性 · 惊讶','大学同学、舍友、学长 / 惊讶'],
+  ['灵渊霆_悲伤','灵渊霆_悲伤 · 男性 · 悲伤','大学同学、舍友、学长 / 悲伤'],
+  ['灵渊霆_生气','灵渊霆_生气 · 男性 · 生气','大学同学、舍友、学长 / 生气'],
+  ['灵渊霆_高兴','灵渊霆_高兴 · 男性 · 高兴','大学同学、舍友、学长 / 高兴'],
+  ['灵素心_悲伤','灵素心_悲伤 · 女性 · 悲伤','动漫解说员、有声书中的少女角色、 / 悲伤'],
+  ['灵素心_厌恶','灵素心_厌恶 · 女性 · 厌恶','动漫解说员、有声书中的少女角色、 / 厌恶'],
+  ['灵采薇_厌恶','灵采薇_厌恶 · 女性 · 厌恶','科普解说员/育儿专家 / 厌恶'],
+  ['灵采薇_生气','灵采薇_生气 · 女性 · 生气','科普解说员/育儿专家 / 生气'],
+  ['灵采薇_高兴','灵采薇_高兴 · 女性 · 高兴','科普解说员/育儿专家 / 高兴'],
+  ['灵卓然_恐惧','灵卓然_恐惧 · 男性 · 恐惧','新闻主播、纪录片旁白、有声书讲述 / 恐惧'],
+  ['灵卓然_悲伤','灵卓然_悲伤 · 男性 · 悲伤','新闻主播、纪录片旁白、有声书讲述 / 悲伤'],
+  ['灵浅忧_高兴','灵浅忧_高兴 · 男性（男童） · 高兴','新闻主播 / 财经记者 / 高兴'],
+  ['灵浅忧_厌恶','灵浅忧_厌恶 · 男性（男童） · 厌恶','新闻主播 / 财经记者 / 厌恶'],
+  ['灵浅忧_悲伤','灵浅忧_悲伤 · 男性（男童） · 悲伤','新闻主播 / 财经记者 / 悲伤'],
+  ['灵浅忧_恐惧','灵浅忧_恐惧 · 男性（男童） · 恐惧','新闻主播 / 财经记者 / 恐惧'],
+  ['灵昭野_高兴','灵昭野_高兴 · 男性 · 高兴','好友、恋人或仰慕者，处于一种轻松 / 高兴'],
+  ['灵昭野_悲伤','灵昭野_悲伤 · 男性 · 悲伤','好友、恋人或仰慕者，处于一种轻松 / 悲伤'],
+  ['灵昭野_厌恶','灵昭野_厌恶 · 男性 · 厌恶','好友、恋人或仰慕者，处于一种轻松 / 厌恶'],
+  ['灵心澜_高兴','灵心澜_高兴 · 女性 · 高兴','豪门阔太、精明的管家、资深的女商 / 高兴'],
+  ['灵心澜_悲伤','灵心澜_悲伤 · 女性 · 悲伤','豪门阔太、精明的管家、资深的女商 / 悲伤'],
+  ['灵犀言_悲伤','灵犀言_悲伤 · 男性 · 悲伤','资深新闻主播、政论片旁白、高级领 / 悲伤'],
+  ['灵犀言_生气','灵犀言_生气 · 男性 · 生气','资深新闻主播、政论片旁白、高级领 / 生气'],
+  ['灵语冰_悲伤','灵语冰_悲伤 · 女性 · 悲伤','新闻主播、法律顾问或知识科普解说 / 悲伤'],
+  ['灵语冰_高兴','灵语冰_高兴 · 女性 · 高兴','新闻主播、法律顾问或知识科普解说 / 高兴'],
+  ['灵语冰_惊讶','灵语冰_惊讶 · 女性 · 惊讶','新闻主播、法律顾问或知识科普解说 / 惊讶'],
+  ['灵惊鸿_厌恶','灵惊鸿_厌恶 · 男性 · 厌恶','二手车销售 / 车主 / 业务员 / 厌恶'],
+  ['灵惊鸿_高兴','灵惊鸿_高兴 · 男性 · 高兴','二手车销售 / 车主 / 业务员 / 高兴'],
+  ['灵惊鸿_惊讶','灵惊鸿_惊讶 · 男性 · 惊讶','二手车销售 / 车主 / 业务员 / 惊讶'],
+  ['灵惊鸿_生气','灵惊鸿_生气 · 男性 · 生气','二手车销售 / 车主 / 业务员 / 生气'],
+  ['灵惊鸿_悲伤','灵惊鸿_悲伤 · 男性 · 悲伤','二手车销售 / 车主 / 业务员 / 悲伤'],
+  ['灵惜蕊_惊讶','灵惜蕊_惊讶 · 女性 · 惊讶','银行柜员、博物馆讲解员、科普解说 / 惊讶'],
+  ['灵惜蕊_厌恶','灵惜蕊_厌恶 · 女性 · 厌恶','银行柜员、博物馆讲解员、科普解说 / 厌恶'],
+  ['灵惜蕊_恐惧','灵惜蕊_恐惧 · 女性 · 恐惧','银行柜员、博物馆讲解员、科普解说 / 恐惧'],
+  ['灵惜蕊_高兴','灵惜蕊_高兴 · 女性 · 高兴','银行柜员、博物馆讲解员、科普解说 / 高兴'],
+  ['灵惜蕊_悲伤','灵惜蕊_悲伤 · 女性 · 悲伤','银行柜员、博物馆讲解员、科普解说 / 悲伤'],
+  ['灵惜蕊_生气','灵惜蕊_生气 · 女性 · 生气','银行柜员、博物馆讲解员、科普解说 / 生气'],
+  ['灵语萱_厌恶','灵语萱_厌恶 · 女性 · 厌恶','恋爱模拟游戏中的女主角、贴心的女 / 厌恶'],
+  ['灵语萱_高兴','灵语萱_高兴 · 女性 · 高兴','恋爱模拟游戏中的女主角、贴心的女 / 高兴'],
+  ['灵语萱_恐惧','灵语萱_恐惧 · 女性 · 恐惧','恋爱模拟游戏中的女主角、贴心的女 / 恐惧'],
+  ['灵语萱_生气','灵语萱_生气 · 女性 · 生气','恋爱模拟游戏中的女主角、贴心的女 / 生气'],
+  ['灵语萱_悲伤','灵语萱_悲伤 · 女性 · 悲伤','恋爱模拟游戏中的女主角、贴心的女 / 悲伤'],
+  ['灵语烟_生气','灵语烟_生气 · 女性 · 生气','妹妹、损友、欢喜冤家类型的女友 / 生气'],
+  ['灵语烟_恐惧','灵语烟_恐惧 · 女性 · 恐惧','妹妹、损友、欢喜冤家类型的女友 / 恐惧'],
+  ['灵语烟_厌恶','灵语烟_厌恶 · 女性 · 厌恶','妹妹、损友、欢喜冤家类型的女友 / 厌恶'],
+  ['灵语烟_高兴','灵语烟_高兴 · 女性 · 高兴','妹妹、损友、欢喜冤家类型的女友 / 高兴'],
+  ['灵语烟_悲伤','灵语烟_悲伤 · 女性 · 悲伤','妹妹、损友、欢喜冤家类型的女友 / 悲伤'],
+  ['灵律雅_恐惧','灵律雅_恐惧 · 女性 · 恐惧','在外打拼的职场女性/无法回家的女 / 恐惧'],
+  ['灵律雅_生气','灵律雅_生气 · 女性 · 生气','在外打拼的职场女性/无法回家的女 / 生气'],
+  ['灵律雅_高兴','灵律雅_高兴 · 女性 · 高兴','在外打拼的职场女性/无法回家的女 / 高兴'],
+  ['灵惊涛_恐惧','灵惊涛_恐惧 · 男性 · 恐惧','网瘾少年 / 大学生 / 广西老 / 恐惧'],
+  ['灵寒陌_厌恶','灵寒陌_厌恶 · 男性 · 厌恶','受委屈的男友、被姐姐训话的弟弟、 / 厌恶'],
+  ['灵寒陌_高兴','灵寒陌_高兴 · 男性 · 高兴','受委屈的男友、被姐姐训话的弟弟、 / 高兴'],
+  ['灵决冥_厌恶','灵决冥_厌恶 · 男性 · 厌恶','新闻主播 / 纪实故事讲述者 / 厌恶'],
+  ['灵决冥_生气','灵决冥_生气 · 男性 · 生气','新闻主播 / 纪实故事讲述者 / 生气'],
+  ['灵决冥_恐惧','灵决冥_恐惧 · 男性 · 恐惧','新闻主播 / 纪实故事讲述者 / 恐惧'],
+  ['灵慈萱_生气','灵慈萱_生气 · 女性 · 生气','职场新人、设计助理、大学同学、邻 / 生气'],
+  ['灵慈萱_悲伤','灵慈萱_悲伤 · 女性 · 悲伤','职场新人、设计助理、大学同学、邻 / 悲伤'],
+  ['灵慈萱_恐惧','灵慈萱_恐惧 · 女性 · 恐惧','职场新人、设计助理、大学同学、邻 / 恐惧'],
+  ['灵妙音_悲伤','灵妙音_悲伤 · 女性 · 悲伤','高冷御姐、严厉的上司、行动派队长 / 悲伤'],
+  ['灵妙音_惊讶','灵妙音_惊讶 · 女性 · 惊讶','高冷御姐、严厉的上司、行动派队长 / 惊讶'],
+  ['灵妙音_厌恶','灵妙音_厌恶 · 女性 · 厌恶','高冷御姐、严厉的上司、行动派队长 / 厌恶'],
+  ['灵妙音_高兴','灵妙音_高兴 · 女性 · 高兴','高冷御姐、严厉的上司、行动派队长 / 高兴'],
+  ['灵妙音_恐惧','灵妙音_恐惧 · 女性 · 恐惧','高冷御姐、严厉的上司、行动派队长 / 恐惧'],
+  ['灵断尘_悲伤','灵断尘_悲伤 · 男性 · 悲伤','知情的朋友、同事或八卦路人 / 悲伤'],
+  ['灵断尘_高兴','灵断尘_高兴 · 男性 · 高兴','知情的朋友、同事或八卦路人 / 高兴'],
+  ['灵断尘_惊讶','灵断尘_惊讶 · 男性 · 惊讶','知情的朋友、同事或八卦路人 / 惊讶'],
+  ['灵断尘_恐惧','灵断尘_恐惧 · 男性 · 恐惧','知情的朋友、同事或八卦路人 / 恐惧'],
+  ['灵断尘_厌恶','灵断尘_厌恶 · 男性 · 厌恶','知情的朋友、同事或八卦路人 / 厌恶'],
+  ['灵熙婉_高兴','灵熙婉_高兴 · 女性 · 高兴','有声书讲述者、娱乐节目旁白、综艺 / 高兴'],
+  ['灵熙婉_恐惧','灵熙婉_恐惧 · 女性 · 恐惧','有声书讲述者、娱乐节目旁白、综艺 / 恐惧'],
+  ['灵熙婉_悲伤','灵熙婉_悲伤 · 女性 · 悲伤','有声书讲述者、娱乐节目旁白、综艺 / 悲伤'],
+  ['灵旭扬_生气','灵旭扬_生气 · 男性 · 生气','男朋友、青梅竹马、生病的室友 / 生气'],
+  ['灵旭扬_恐惧','灵旭扬_恐惧 · 男性 · 恐惧','男朋友、青梅竹马、生病的室友 / 恐惧'],
+  ['灵旭扬_高兴','灵旭扬_高兴 · 男性 · 高兴','男朋友、青梅竹马、生病的室友 / 高兴'],
+  ['灵旭扬_惊讶','灵旭扬_惊讶 · 男性 · 惊讶','男朋友、青梅竹马、生病的室友 / 惊讶'],
+  ['灵旭扬_悲伤','灵旭扬_悲伤 · 男性 · 悲伤','男朋友、青梅竹马、生病的室友 / 悲伤'],
+  ['灵旭扬_厌恶','灵旭扬_厌恶 · 男性 · 厌恶','男朋友、青梅竹马、生病的室友 / 厌恶'],
+  ['灵阅川_生气','灵阅川_生气 · 男性 · 生气','纪录片旁白、资深新闻主播、博物馆 / 生气'],
+  ['灵阅川_悲伤','灵阅川_悲伤 · 男性 · 悲伤','纪录片旁白、资深新闻主播、博物馆 / 悲伤'],
+  ['灵阅川_高兴','灵阅川_高兴 · 男性 · 高兴','纪录片旁白、资深新闻主播、博物馆 / 高兴'],
+  ['灵阅川_厌恶','灵阅川_厌恶 · 男性 · 厌恶','纪录片旁白、资深新闻主播、博物馆 / 厌恶'],
+  ['灵阅川_恐惧','灵阅川_恐惧 · 男性 · 恐惧','纪录片旁白、资深新闻主播、博物馆 / 恐惧'],
+  ['灵妩月_厌恶','灵妩月_厌恶 · 女性 · 厌恶','值得信赖的同伴、姐姐、军师或剧情 / 厌恶'],
+  ['灵妩月_生气','灵妩月_生气 · 女性 · 生气','值得信赖的同伴、姐姐、军师或剧情 / 生气'],
+  ['灵妩月_惊讶','灵妩月_惊讶 · 女性 · 惊讶','值得信赖的同伴、姐姐、军师或剧情 / 惊讶'],
+  ['灵妩月_恐惧','灵妩月_恐惧 · 女性 · 恐惧','值得信赖的同伴、姐姐、军师或剧情 / 恐惧'],
+  ['灵妩月_高兴','灵妩月_高兴 · 女性 · 高兴','值得信赖的同伴、姐姐、军师或剧情 / 高兴'],
+  ['灵妩月_悲伤','灵妩月_悲伤 · 女性 · 悲伤','值得信赖的同伴、姐姐、军师或剧情 / 悲伤'],
+  ['灵汐月_悲伤','灵汐月_悲伤 · 女性 · 悲伤','情感讲述者、恋人、知心姐姐 / 悲伤'],
+  ['灵汐月_高兴','灵汐月_高兴 · 女性 · 高兴','情感讲述者、恋人、知心姐姐 / 高兴'],
+  ['灵黛嗔_厌恶','灵黛嗔_厌恶 · 女性 · 厌恶','影评博主、好物推荐官、知心朋友 / 厌恶'],
+  ['灵黛嗔_高兴','灵黛嗔_高兴 · 女性 · 高兴','影评博主、好物推荐官、知心朋友 / 高兴'],
+  ['US_Emma','US_Emma · 女性/美式 · 语音助手、旁白、产品对话语音',''],
+  ['UK_George','UK_George · 男性/英式 · 有声书、正式播报',''],
+  ['UK_Charlotte','UK_Charlotte · 女性/英式 · 有声书、节奏从容的旁白',''],
+];
+
+let voiceDataReady = false;
+
+function buildVoiceSelects(){
+  ['ipVoice','abVoice'].forEach(id=>{
+    const sel = $(id);
+    if(!sel) return;
+    sel.innerHTML = '';
+    const none = document.createElement('option');
+    none.value = ''; none.textContent = '不使用内置音色';
+    sel.appendChild(none);
+    VOICE_DATA.forEach(([ip, label, note])=>{
+      const o = document.createElement('option');
+      o.value = ip; o.textContent = label; o.title = note || label;
+      sel.appendChild(o);
+    });
+  });
+  voiceDataReady = true;
+  renderIpChars();
+}
+
+/* IP 内置音色：先把 233 项按「角色」聚合成 84 个，再按情绪拆变体。
+   不用搜索框——点性别/年龄/语言标签缩小范围，再点角色，最后点情绪定稿。 */
+const IP_GROUPS = (()=>{
+  const map = {};
+  VOICE_DATA.forEach(([ip, label, note])=>{
+    const us = /^US_|^UK_/.test(ip);
+    const base = us ? ip : ip.split('_')[0];
+    const mood = us ? '' : (ip.split('_')[1] || '');
+    if(!map[base]) map[base] = {base, variants:[], labels:''};
+    map[base].variants.push({ip, mood: mood || '中性', label, note});
+    map[base].labels += ' ' + label;
+  });
+  return Object.values(map).map(g=>{
+    const s = g.labels;
+    return {
+      base: g.base, variants: g.variants,
+      sex: /女性|女童|女声|·\s*女/.test(s) ? 'f' : (/男性|男童|男声|·\s*男/.test(s) ? 'm' : ''),
+      age: /童/.test(s) ? 'kid' : (/少年|少女/.test(s) ? 'teen' : (/老年|中老年/.test(s) ? 'old' : 'adult')),
+      lang: /^US_|^UK_/.test(g.base) ? 'en' : 'zh',
+    };
+  });
+})();
+
+let ipF = {sex:'', age:'', lang:'', mood:''};
+let ipCharBase = '';
+let ipSelIp = '';
+
+function ipVisibleGroups(){
+  return IP_GROUPS.filter(g=>(!ipF.sex || g.sex === ipF.sex)
+    && (!ipF.age || g.age === ipF.age)
+    && (!ipF.lang || g.lang === ipF.lang)
+    && (!ipF.mood || g.variants.some(v=>v.mood === ipF.mood)));
+}
+
+function ipChip(text, on, title, fn){
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'ipchip' + (on ? ' on' : '');
+  b.textContent = text; if(title) b.title = title;
+  b.onclick = fn;
+  return b;
+}
+
+function renderIpChars(){
+  const box = $('ipCharChips');
+  if(!voiceDataReady || !box) return;
+  box.innerHTML = '';
+  const list = ipVisibleGroups();
+  list.forEach(g=>{
+    box.appendChild(ipChip(g.base, g.base === ipCharBase, (g.variants[0] && g.variants[0].note) || g.base, ()=>selectIpChar(g)));
+  });
+  if(!list.length) box.innerHTML = '<span class="hint" style="margin:0">没有匹配的角色，放宽上面的标签试试</span>';
+  renderIpMoods();
+}
+
+function renderIpMoods(){
+  const line = $('ipMoodLine'), box = $('ipMoodChips');
+  const g = IP_GROUPS.find(x=>x.base === ipCharBase);
+  if(!line || !box) return;
+  if(!g || g.variants.length <= 1){
+    line.hidden = true; box.innerHTML = '';
+    return;
+  }
+  line.hidden = false;
+  box.innerHTML = '';
+  const cur = $('ipVoice').value;
+  g.variants.forEach(v=>{
+    box.appendChild(ipChip(v.mood, v.ip === cur, v.label, ()=>selectIpChar(g, v.mood)));
+  });
+}
+
+function selectIpVariant(g, v){
+  if(!v) return;
+  ipSelIp = v.ip;
+  $('ipVoice').value = v.ip;
+  if($('instr')) $('instr').value = v.ip;
+  const c = $('ipCount');
+  if(c) c.textContent = `已选：${g.base} · ${v.mood}（${v.ip}） · 角色共 ${IP_GROUPS.length} 个，当前筛出 ${ipVisibleGroups().length} 个`;
+  $('ipCharChips') && [...$('ipCharChips').children].forEach(b=>b.classList.toggle('on', b.textContent === g.base));
+  $('ipMoodChips') && [...$('ipMoodChips').children].forEach(b=>b.classList.toggle('on', b.textContent === v.mood));
+  log('内置音色：' + v.ip + '（已切到 IP 任务，不用参考音频）', 's');
+}
+
+function selectIpChar(g, mood){
+  if(!g) return;
+  ipCharBase = g.base;
+  const v = ((mood || ipF.mood) && g.variants.find(x=>x.mood === (mood || ipF.mood))) || g.variants.find(x=>x.mood === '中性') || g.variants[0];
+  renderIpChars();
+  selectIpVariant(g, v);
+}
+
+/* 四排属性标签：点一下换筛选值，当前值高亮；情绪也能直接筛角色 */
+['ipSexSeg','ipAgeSeg','ipLangSeg','ipMoodSeg'].forEach(id=>{
+  const seg = $(id);
+  if(!seg) return;
+  const key = seg.dataset.key;
+  seg.onclick = e=>{
+    const b = e.target.closest('button'); if(!b) return;
+    ipF[key] = b.dataset.v;
+    [...seg.children].forEach(x=>x.classList.toggle('on', x === b));
+    const g = IP_GROUPS.find(x=>x.base === ipCharBase);
+    const keep = g && ipVisibleGroups().indexOf(g) !== -1;
+    if(!keep){
+      ipCharBase = '';
+      $('ipVoice').value = '';
+      if($('instr')) $('instr').value = '';
+    }
+    renderIpChars();
+    if(keep) selectIpChar(g);            /* 角色还在，就跟着新情绪换变体 */
+    else if(!ipCharBase){
+      const first = ipVisibleGroups()[0];
+      if(first) selectIpChar(first);
+    }
+  };
+});
+
+const TAGS = [
+  ['[Breathing]','呼吸'],
+  ['[Cough]','咳嗽'],
+  ['[Sigh]','叹气'],
+  ['[Laughter]','笑声'],
+  ['[Uhm]','犹豫'],
+  ['[Surprise-ah]','惊“啊”'],
+  ['[Surprise-oh]','惊“哦”'],
+  ['[Dissatisfaction-hnn]','不满“哼”'],
+  ['[Confirmation-en]','肯定“嗯”'],
+  ['[Question-ei]','疑问“诶”'],
+  ['[Question-ah]','疑问“啊”'],
+  ['[Question-en]','疑问“嗯”'],
+  ['[Question-oh]','疑问“哦”'],
+  ['[Question-huh]','疑问“哈”'],
+];
+
+function insertAtCursor(el, str){
+  const s = el.selectionStart, e = el.selectionEnd, v = el.value;
+  el.value = v.slice(0,s) + str + v.slice(e);
+  el.focus();
+  el.selectionStart = el.selectionEnd = s + str.length;
+  updateCount();
+}
+
+(function buildTagBar(){
+  const bar = $('tagbar');
+  TAGS.forEach(([tag, label])=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.title = '插入 ' + tag;
+    b.onclick = ()=> insertAtCursor($('input'), tag);
+    bar.appendChild(b);
+  });
+  const tip = document.createElement('button');
+  tip.type = 'button';
+  tip.textContent = '标签说明';
+  tip.onclick = ()=> alert(
+    '这 14 个标签会原样送进模型，插入在句子中间即可，例如：\n' +
+    '唉，[Sigh]算了，这件事我不想再提了。\n\n' +
+    '注意：标签区分大小写，方括号不能少，必须用英文半角。\n' +
+    '实测：[Laughter] 会让时长变长并带笑声，[Sigh] 会拖长带叹息。\n\n' +
+    '不支持：情绪(高兴/悲伤)、音高、音量、方言——这些要走上面的「完整模式」。\n' +
+    '支持：语速滑块（服务端真的生效，1.5 倍时长为 1/1.5）。'
+  );
+  bar.appendChild(tip);
+})();
+
+function updateCount(){
+  const t = $('input').value;
+  const n = t.replace(/\s/g,'').length;
+  $('count').textContent = n + ' 字';
+  $('est').textContent = n ? `约 ${(n/4.5).toFixed(0)} 秒音频` : '';
+  const sp = $('segprev');
+  if(!sp) return;
+  if(!n){ sp.textContent = ''; return; }
+  const lim = parseInt(($('advSplit') && $('advSplit').value) || 24, 10);
+  const segs = split24(t, lim);
+  sp.innerHTML = `将切成 <b>${segs.length}</b> 段（每段 ≤${lim} 字，与服务端同一套规则）`
+    + (segs.length > 1 ? '：' + segs.map((s,i)=> `${i+1}.${escHtml(s.length>13?s.slice(0,13)+'…':s)}`).join(' ｜ ') : '');
+}
+
+function escHtml(s){
+  return String(s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+$('input').addEventListener('input', ()=>{ updateCount(); setStep(1); });
+$('speed').addEventListener('input', e=>{ $('speedval').textContent = (+e.target.value).toFixed(2); });
+$('clear').onclick = ()=>{ $('input').value=''; updateCount(); setStep(1); };
+
+/* 快捷键：Ctrl+Enter 生成、Esc 停止 */
+document.addEventListener('keydown', e=>{
+  if($('viewConsole') && $('viewConsole').hidden) return;
+  if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){
+    e.preventDefault();
+    if(!$('go').disabled) $('go').click();
+  }else if(e.key === 'Escape' && !$('stop').disabled){
+    $('stop').click();
+  }
+});
+
+function splitText(text, limit){
+  const parts = [];
+  let buf = '';
+  // 按句子切，句末标点保留
+  const sentences = text.match(/[^。！？!?\n；;]+[。！？!?\n；;]?/g) || [text];
+  for(const s of sentences){
+    if((buf + s).length <= limit){ buf += s; }
+    else{
+      if(buf.trim()) parts.push(buf.trim());
+      if(s.length <= limit){ buf = s; }
+      else{
+        // 单句超长，硬切
+        for(let i=0;i<s.length;i+=limit) parts.push(s.slice(i,i+limit));
+        buf = '';
+      }
+    }
+  }
+  if(buf.trim()) parts.push(buf.trim());
+  return parts;
+}
+
+/* 把太短的句子并入相邻句：模型对 <15 字的输入不稳定（实测会退化成底噪） */
+const MIN_SEG = 15;
+function visibleLen(s){ return s.replace(/[\s，。！？；：、,.!?;:""''「」『』（）()《》—…·～~-]/g, '').length; }
+
+/* 与服务端 split_text 等价的分段预览：24 字上限、短段合并、标签整体不切断 */
+const TAG_RE_JS = /\[(Breathing|Cough|Sigh|Laughter|Surprise-ah|Surprise-oh|Dissatisfaction-hnn|Uhm|Confirmation-en|Question-(?:ei|ah|en|oh|huh))\]/g;
+const TAG_PH = '\uE000';
+function split24(text, limit){
+  const lim = limit || 24;
+  const tags = [];
+  const prot = String(text).replace(TAG_RE_JS, m=>{ tags.push(m); return TAG_PH; });
+  const raw = splitText(prot, lim);
+  const merged = [];
+  raw.forEach(p=>{
+    if(merged.length && (p.length < 8 || merged[merged.length-1].length < 8)
+       && merged[merged.length-1].length + p.length <= lim){
+      merged[merged.length-1] += p;
+    }else merged.push(p);
+  });
+  let k = 0;
+  return merged.map(p=> p.split(TAG_PH).join('\u0000')).map(p=>{
+    let out = '', idx;
+    while((idx = p.indexOf('\u0000')) !== -1){
+      out += p.slice(0, idx) + (tags[k++] || '');
+      p = p.slice(idx + 1);
+    }
+    return out + p;
+  });
+}
+
+function mergeShortSentences(text, minLen){
+  const sentences = (text.match(/[^。！？!?\n；;]+[。！？!?\n；;]?/g) || [text])
+    .map(s=>s.trim()).filter(Boolean);
+  const out = [];
+  let buf = '';
+  for(let i=0;i<sentences.length;i++){
+    buf = buf ? buf + sentences[i] : sentences[i];
+    const len = visibleLen(buf);
+    if(len < minLen && i < sentences.length-1) continue;  // 还短，继续并下一句
+    out.push(buf); buf = '';
+  }
+  if(buf) out.push(buf);
+  return out;
+}
+
+function buildParts(text){
+  const merge = $('mergeshort').checked;
+  const maxLen = 150;
+  const segs = merge ? mergeShortSentences(text, MIN_SEG) : (text.match(/[^。！？!?\n；;]+[。！？!?\n；;]?/g)||[text]).map(s=>s.trim()).filter(Boolean);
+  const limited = $('autosplit').checked ? segs : [text.trim()];
+  return splitText(limited.join(''), maxLen);
+}
+
+/* ---------- 音频拼接 ---------- */
+let actx = null;
+function getCtx(){
+  if(!actx) actx = new (window.AudioContext || window.webkitAudioContext)({sampleRate:44100});
+  return actx;
+}
+
+async function blobToBuffer(blob){
+  const ab = await blob.arrayBuffer();
+  return await getCtx().decodeAudioData(ab);
+}
+
+async function concatBuffers(bufs, gapSec){
+  const sr = 44100, ch = 1;
+  const gap = Math.floor(gapSec*sr);
+  let total = 0;
+  bufs.forEach(b=> total += b.length);
+  total += gap * (bufs.length-1);
+  const out = new Float32Array(total);
+  let off = 0;
+  bufs.forEach((b,i)=>{
+    const data = b.getChannelData(0);
+    out.set(data, off);
+    off += b.length;
+    if(i < bufs.length-1) off += gap;
+  });
+  return encodeWav(out, sr, ch);
+}
+
+function encodeWav(samples, sampleRate, channels){
+  const blockAlign = channels*2;
+  const byteRate = sampleRate*blockAlign;
+  const dataSize = samples.length*2;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  const ws = (o,s)=>{ for(let i=0;i<s.length;i++) view.setUint8(o+i, s.charCodeAt(i)); };
+  ws(0,'RIFF'); view.setUint32(4,36+dataSize,true); ws(8,'WAVE');
+  ws(12,'fmt '); view.setUint32(16,16,true); view.setUint16(20,1,true);
+  view.setUint16(22,channels,true); view.setUint32(24,sampleRate,true);
+  view.setUint32(28,byteRate,true); view.setUint16(32,blockAlign,true); view.setUint16(34,16,true);
+  ws(36,'data'); view.setUint32(40,dataSize,true);
+  let o = 44;
+  for(let i=0;i<samples.length;i++){
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(o, s<0 ? s*0x8000 : s*0x7FFF, true); o += 2;
+  }
+  return new Blob([view], {type:'audio/wav'});
+}
+
+/* ---------- 音频转码（本地） ---------- */
+async function toMono44k(buf){
+  let data = buf.getChannelData(0);
+  if(buf.numberOfChannels > 1){
+    const n = buf.length;
+    data = new Float32Array(n);
+    for(let c=0;c<buf.numberOfChannels;c++){
+      const d = buf.getChannelData(c);
+      for(let i=0;i<n;i++) data[i] += d[i]/buf.numberOfChannels;
+    }
+  }
+  if(buf.sampleRate !== 44100){
+    const len = Math.max(1, Math.round(data.length * 44100 / buf.sampleRate));
+    const off = new OfflineAudioContext(1, len, 44100);
+    const srcBuf = off.createBuffer(1, data.length, buf.sampleRate);
+    srcBuf.copyToChannel(data, 0);
+    const src = off.createBufferSource();
+    src.buffer = srcBuf; src.connect(off.destination); src.start();
+    data = (await off.startRendering()).getChannelData(0);
+  }
+  return data;
+}
+
+function abToBase64(ab){
+  const bytes = new Uint8Array(ab);
+  let s = '';
+  const chunk = 0x8000;
+  for(let i=0;i<bytes.length;i+=chunk){
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i+chunk));
+  }
+  return btoa(s);
+}
+
+/* ---------- 参考音频逐字稿校验（走服务端 /asr） ---------- */
+const ASR_CACHE = new Map();
+
+function normText(s){
+  return (s || '').replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, '');
+}
+
+function bigramSet(s){
+  const set = new Set();
+  for(let i=0;i<s.length-1;i++) set.add(s.slice(i, i+2));
+  if(!set.size && s.length) set.add(s);
+  return set;
+}
+
+function textSim(a, b){
+  const A = bigramSet(normText(a)), B = bigramSet(normText(b));
+  if(!A.size || !B.size) return 0;
+  let hit = 0;
+  A.forEach(g => { if(B.has(g)) hit++; });
+  return hit / Math.max(A.size, B.size);
+}
+
+async function asrOfBuffer(buf, key){
+  if(ASR_CACHE.has(key)) return ASR_CACHE.get(key);
+  const r = await fetch(OFF + '/asr', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ref_audio: 'data:audio/wav;base64,' + abToBase64(buf)}),
+  });
+  if(!r.ok) throw new Error('转写失败 HTTP ' + r.status);
+  const j = await r.json();
+  if(!j.ok) throw new Error(j.error || '转写失败');
+  ASR_CACHE.set(key, j.text || '');
+  return j.text || '';
+}
+
+async function asrOfRecord(rec){
+  return asrOfBuffer(rec.wav, 'rec:' + rec.name + '|' + rec.seconds + '|' + rec.created);
+}
+
+async function checkTranscript(rec, typed){
+  const asr = await asrOfRecord(rec);
+  const score = textSim(typed, asr);
+  return {asr, score, ok: !asr || score >= 0.70};
+}
+
+/* 音色路径说明：明确「这次生成到底读不读参考音频/逐字稿」 */
+async function renderRefStatus(){
+  const el = $('refStatus');
+  if(!el) return;
+  const rm = ($('refMode') && $('refMode').value) || 'spk';
+  const file = $('vfile').files[0];
+  const vsel = $('voice').value;
+  let name = '', secs = null, txt = '';
+  if(file){
+    name = file.name + '（待保存）'; secs = null; txt = $('vref').value.trim();
+  }else if(vsel.startsWith('local:')){
+    try{
+      const rec = await idbGet(vsel.slice(6));
+      if(rec){ name = rec.name; secs = rec.seconds; txt = (rec.ref_text || '').trim(); }
+    }catch(e){}
+  }
+  const who = name ? (name + (secs ? '（' + Number(secs).toFixed(1) + 's）' : '')) : '还没选参考音频';
+  let line = '';
+  if(rm === 'spk'){
+    line = '当前路径：纯净音色嵌入 · 参考音频：' + who +
+      ' · 每次生成读取音频算说话人嵌入，不读逐字稿。';
+  }else{
+    const need = (rm === 'prompt_emb') ? '参考音频 + 逐字稿 + 说话人嵌入（官方零样本克隆）' : '参考音频 + 逐字稿';
+    line = '当前路径：' + need + ' · 每次生成都会重新读取参考音频：' + who +
+      ' · 逐字稿：' + (txt ? '「' + txt + '」' : '（空，必须补上）');
+    if(!txt) line += ' ← 没有逐字稿这个路径会直接报错/出噪音';
+  }
+  el.textContent = line;
+  el.style.color = (rm !== 'spk' && !txt) ? '#e8b4b4' : '';
+}
+
+/* 「按音频自动转写」：优先用待保存的文件，否则用当前选中的本地音色 */$('vrefAsr').onclick = async ()=>{
+  const btn = $('vrefAsr');
+  const file = $('vfile').files[0];
+  const vsel = $('voice').value;
+  btn.disabled = true; btn.textContent = '识别中…';
+  try{
+    let buf, key;
+    if(file){
+      const decoded = await blobToBuffer(file);
+      const pcmRaw = await toMono44k(decoded);
+      const cleaned = autoClean(pcmRaw, 44100);
+      const wav = encodeWav(cleaned.pcm, 44100, 1);
+      buf = await wav.arrayBuffer();
+      key = 'file:' + file.name + '|' + file.size + '|' + (file.lastModified || 0);
+      if(cleaned.trimmed) log('注意：音频已自动去静音/截断，逐字稿要按「整理后」的音频来对——用这次转写的结果最稳', 'e');
+    }else if(vsel.startsWith('local:')){
+      const rec = await idbGet(vsel.slice(6));
+      if(!rec){ alert('先选一个本地音色，或选一个参考音频文件'); return; }
+      buf = rec.wav; key = 'rec:' + rec.name + '|' + rec.seconds + '|' + rec.created;
+    }else{
+      alert('先在「参考音频」里选文件，或在「本地音色」里选一个已有音色');
+      return;
+    }
+    log('正在识别参考音频…');
+    const text = await asrOfBuffer(buf, key);
+    if(!text){ log('没识别出内容（音频可能太短或太吵）', 'e'); return; }
+    $('vref').value = text;
+    log('转写完成：' + text, 's');
+    renderRefStatus();
+  }catch(e){
+    log('转写失败: ' + e.message, 'e');
+  }finally{
+    btn.disabled = false; btn.textContent = '按音频自动转写';
+  }
+};
+
+/* 参考音频自动整理：去首尾静音 + 超长时截取最响的 20 秒 */
+function autoClean(pcm, sr){
+  const n = pcm.length;
+  let peak = 0;
+  for(let i=0;i<n;i++){ const a = Math.abs(pcm[i]); if(a > peak) peak = a; }
+  const th = Math.max(peak * 0.03, 0.002);
+  let s = 0, e = n - 1;
+  while(s < n && Math.abs(pcm[s]) < th) s++;
+  while(e > s && Math.abs(pcm[e]) < th) e--;
+  const pad = Math.round(sr * 0.15);
+  s = Math.max(0, s - pad); e = Math.min(n - 1, e + pad);
+  let seg = pcm.slice(s, e + 1);
+  const maxLen = Math.round(sr * 20);
+  if(seg.length > maxLen){
+    // 粗粒度滑动窗口找能量最大的一段
+    const step = Math.round(sr * 0.5), win = maxLen;
+    let best = 0, bestE = -1;
+    for(let off = 0; off + win <= seg.length; off += step){
+      let sum = 0;
+      for(let i=off;i<off+win;i+=16){ sum += seg[i]*seg[i]; }
+      if(sum > bestE){ bestE = sum; best = off; }
+    }
+    seg = seg.slice(best, best + win);
+  }
+  const trimmed = (s > 0) || (e < n - 1);
+  return {pcm: seg, seconds: seg.length / sr, trimmed};
+}
+
+/* ---------- 合成 ---------- */
+async function synthOne(text, opt){
+  opt = opt || {};
+  const body = {
+    model: 'ming-3.0-tts',
+    input: text,
+    voice: 'default',
+    response_format: $('format').value,
+    speed: +$('speed').value,
+    language: $('lang').value || 'Auto',
+  };
+
+  const vsel = $('voice').value;
+  if(vsel && vsel.startsWith('local:')){
+    const name = vsel.slice(6);
+    if(!db) db = await openDB();
+    const rec = await idbGet(name);
+    if(!rec) throw new Error('本地音色「' + name + '」不在库里');
+    body.ref_audio = 'data:audio/wav;base64,' + abToBase64(rec.wav);
+    // 仅音色模式：只用说话人特征，不传逐字稿
+    if(opt.xvec){
+      body.x_vector_only_mode = true;
+    }else{
+      body.ref_text = rec.ref_text;
+    }
+  }
+
+  const seed = opt.seed || $('seed').value.trim();
+  if(seed) body.seed = +seed;
+  // 硬上限：防止模型卡住复读生成几十秒。实测约 16 token/秒，这里给到 28 token/秒的余量
+  if(opt.maxTokens) body.max_new_tokens = Math.round(opt.maxTokens);
+
+  const r = await fetch(API + '/v1/audio/speech', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+    signal: aborter ? aborter.signal : undefined,
+  });
+  if(!r.ok){
+    const txt = await r.text();
+    throw new Error(`HTTP ${r.status} ${txt.slice(0,160)}`);
+  }
+  return await r.blob();
+}
+
+/* 生成结果的健康度：好的人声约 -21~-23dB，底噪/空音在 -32dB 以下；时长按字數估算，超太多就是模型卡住复读 */
+function bufferRms(buf){
+  const d = buf.getChannelData(0);
+  let sum = 0;
+  for(let i=0;i<d.length;i++) sum += d[i]*d[i];
+  return 20*Math.log10(Math.max(Math.sqrt(sum/d.length), 1e-9));
+}
+
+/* 中文约 4.5 字/秒（语速 1.0） */
+function expectedDuration(text){
+  const spd = +$('speed').value || 1;
+  return Math.max(1.2, visibleLen(text) / 4.5 / spd);
+}
+
+async function synthSegment(text){
+  const wantRetry = $('smartretry').checked;
+  const allowXvec = $('xvecfallback').checked && $('voice').value.startsWith('local:');
+  const userSeed = $('seed').value.trim();
+  const exp = expectedDuration(text);
+  const durLimit = Math.max(exp * 2.2, exp + 4);   // 允许的时长上限
+  const durFloor = Math.max(0.6, exp * 0.35);      // 太短也是废的
+
+  const plans = [{seed: userSeed ? +userSeed : null, xvec:false, label:'首试', maxTokens: durLimit * 28}];
+  if(wantRetry){
+    plans.push({seed:null, xvec:false, label:'换种子', maxTokens: durLimit * 28});
+    plans.push({seed:null, xvec:false, label:'再换种子', maxTokens: durLimit * 28});
+    if(allowXvec) plans.push({seed:null, xvec:true, label:'仅音色', maxTokens: durLimit * 28});
+  }
+
+  let best = null, bestScore = -1e9;
+  for(let i=0;i<plans.length;i++){
+    const p = plans[i];
+    try{
+      const blob = await synthOne(text, p);
+      const buf = await blobToBuffer(blob);
+      const rms = bufferRms(buf), dur = buf.duration;
+      const tooLong = dur > durLimit;
+      const tooShort = dur < durFloor;
+      const tooQuiet = rms < -32;
+      const ok = !tooLong && !tooShort && !tooQuiet;
+      // 打分：合格优先，其次时长最接近预期、音量最高
+      let score = 0;
+      if(ok) score += 1000;
+      if(tooQuiet) score -= 300;
+      if(tooLong) score -= 200 * (dur / durLimit);
+      if(tooShort) score -= 100;
+      score -= Math.abs(dur - exp) * 2;
+      score += rms / 10;
+      if(score > bestScore){ bestScore = score; best = {blob, buf, rms, dur, mode:p.label}; }
+      if(ok) return {blob, buf, rms, dur, mode: p.label};
+      const why = [];
+      if(tooQuiet) why.push('音量过低');
+      if(tooLong) why.push('时长失控');
+      if(tooShort) why.push('时长过短');
+      log(`第 ${i+1} 次不成（${rms.toFixed(1)}dB / ${dur.toFixed(1)}s，预期约 ${exp.toFixed(1)}s｜${why.join('/')}），` + (i<plans.length-1?'继续试':'没有更多备选'));
+    }catch(e){
+      if(cancelled) throw e;
+      log('第 ' + (i+1) + ' 次失败：' + e.message, 'e');
+    }
+  }
+  if(best){
+    log(`重试用尽，取相对最好的一次（${best.rms.toFixed(1)}dB / ${best.dur.toFixed(1)}s，${best.mode}）`, 'e');
+    return best;
+  }
+  throw new Error('全部尝试都失败');
+}
+
+function setBusy(b){
+  $('go').disabled = b; $('stop').disabled = !b;
+  $('prog').style.display = b ? 'block' : 'none';
+  setStep(b ? 3 : 2);
+}
+function setProgress(p){ $('prog').firstElementChild.style.width = (p*100).toFixed(0)+'%'; }
+
+/* 步骤条：1 写稿 → 2 定音色 → 3 生成 → 4 试听导出 */
+function setStep(n){
+  const bar = $('steps'); if(!bar) return;
+  bar.querySelectorAll('.step').forEach(el=>{
+    el.classList.toggle('on', +el.dataset.s === n);
+  });
+}
+
+/* 浮层提示：错误/成功不再只埋在日志里 */
+function toast(msg, type){
+  const box = $('toast'); if(!box) return;
+  const el = document.createElement('div');
+  el.className = 't ' + (type || '');
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(()=>{ el.style.opacity = '0'; el.style.transition = 'opacity .2s'; setTimeout(()=>el.remove(), 220); }, 3800);
+  while(box.children.length > 4) box.firstElementChild.remove();
+}
+
+function showResult(blob, metaText, name){
+  if(lastUrl) URL.revokeObjectURL(lastUrl);
+  lastBlob = blob; lastUrl = URL.createObjectURL(blob);
+  $('player').src = lastUrl;
+  $('dl').disabled = false;
+  lastMeta = metaText; $('meta').innerHTML = metaText;
+  $('dl').onclick = ()=>{
+    const a = document.createElement('a');
+    a.href = lastUrl; a.download = name; a.click();
+    log('已保存 ' + name);
+  };
+  if($('autosave').checked){
+    const a = document.createElement('a');
+    a.href = lastUrl; a.download = name; a.click();
+  }
+  setStep(4);
+  const rb = $('resbadge');
+  if(rb){ rb.textContent = new Date().toLocaleTimeString('zh-CN',{hour12:false}); rb.className = 'badge on'; }
+}
+
+/* 每个任务真正接受的字段（服务端也会做同样清洗，这里只为了让界面不误导） */
+const TASK_ALLOW = {
+  TTS: [],
+  BASIC: ['ctlSpeed', 'ctlPitch', 'ctlVolume'],
+  EMOTION: ['ctlEmotion'],
+  DIALECT: ['ctlDialect'],
+  FREEFORM: ['instr'],
+  VOICE_DESIGN: ['instr', 'ctlSpeed', 'ctlPitch', 'ctlVolume'],
+  IP: ['instr'],
+};
+const ALL_CTLS = ['ctlSpeed', 'ctlPitch', 'ctlVolume', 'ctlEmotion', 'ctlDialect', 'instr', 'langId'];
+/* 目标语言对除方言外的任务都生效（方言任务里模型会忽略 language_id） */
+const LANG_TASKS = ['TTS', 'BASIC', 'EMOTION', 'FREEFORM', 'VOICE_DESIGN', 'IP'];
+
+/* FREEFORM：描述「怎么说」——语气、节奏、重音、情绪强度 */
+const FF_PRESETS = [
+  ['撒娇', '用撒娇的语气说话，声音黏一点，尾音上扬，带一点鼻音。'],
+  ['惊喜', '用特别惊喜的语气，音调突然上扬，像刚发现一件好事。'],
+  ['愤怒质问', '用压抑着怒火的语气，语速偏快，重音咬在关键的字上。'],
+  ['委屈哭腔', '带明显哭腔，声音微微发抖，语速放慢，句间留一点抽气。'],
+  ['疲惫吐槽', '用下班后很累、有气无力的语气，语速偏慢，句尾往下掉。'],
+  ['睡前故事', '用温柔、舒缓的声音讲述，像在轻声安慰孩子。'],
+  ['耳语安抚', '压低声音贴在耳边说话，气声重，语速很慢，音量轻。'],
+  ['悬疑旁白', '用低而稳的旁白语气，句子之间停顿明显，气息压低。'],
+  ['体育教练', '用鼓励的口吻，节奏有力、语气坚定，但不要喊。'],
+  ['带货急迫', '用急促有煽动力的带货语气，重音落在价格和数量上。'],
+  ['温柔叙事', '用温暖、亲密的故事讲述语气，节奏不急，尾音轻收。'],
+  ['严肃播报', '用新闻播报的语气，咬字清晰，语调平稳不带情绪起伏。'],
+  ['秒杀逼单', '用一口气说完的逼单语气，重音砸在「最后三秒」和「价格」上，语速越来越快。'],
+  ['开箱惊喜', '像刚拆开礼物，先短促吸一口气，再用兴奋上扬的语调说出来。'],
+  ['产品讲解', '用专业但亲切的讲解语气，术语咬清楚，每句之间留短停顿。'],
+  ['种草闺蜜', '像闺蜜私聊推荐东西，语气轻快，带一点「你信我」的笃定。'],
+  ['价格对比', '把前后的两个价格说成明显的高低对比，说到便宜的那个音调抬高、语速加快。'],
+  ['反派对峙', '用阴冷低沉的语气，语速慢，句尾停顿，字字带压。'],
+  ['悬疑倒叙', '用压低的气声叙述，句与句之间留长停顿，像怕被人听见。'],
+  ['悲情独白', '带哽咽的独白，气息不稳，长句中途要停一下喘气。'],
+  ['爆发怒吼', '突然爆发，音量抬高、语速急促，结尾声音发哑。'],
+  ['心虚躲闪', '说话含糊、音量偏小，像在找借口，句尾习惯性弱下去。'],
+  ['武侠说书', '用评书的腔调，节奏起伏大，关键处把尾音拉长再一顿。'],
+  ['古文诵读', '用诵读古文的节奏，字与字之间稍拖，句末下沉收住。'],
+  ['纪录片解说', '用沉稳克制的纪录片解说语气，信息密度高，不带情绪起伏。'],
+  ['儿童绘本', '像给孩子读绘本，语调夸张、表情足，拟声词要活。'],
+  ['电话敷衍', '像在电话里应付对方，语速快、语气敷衍，句尾带一点不耐烦。'],
+  ['刚睡醒', '像刚睡醒，声音沙哑含糊，语速慢，气息不足。'],
+  ['边笑边说', '边说边笑，句子中间会有笑意带出的气声，尾音上扬。'],
+  ['故作镇定', '努力装镇定，语速刻意放慢，但句尾轻微发抖。'],
+];
+
+/* VOICE_DESIGN：描述「这个人是谁」——性别、年龄、音色质感、发声方式 */
+const VD_PRESETS = [
+  ['ASMR 耳语', '这是一种ASMR耳语风格，女性用轻柔的普通话耳语，气音成分重，音量极低，贴着麦克风，语速极慢。'],
+  ['宫斗皇后', '宫斗剧中的威严皇后，中年女性声音沉稳，语速雍容和缓，每个字掷地有声，语气波澜不惊但暗藏锋芒。'],
+  ['低沉中年男', '中年男性，嗓音低沉沙哑，气息略粗，语速偏慢，冷静克制，适合纪录片旁白与纪实解说。'],
+  ['清亮少年', '少年男声，音色清亮干净，语速轻快，语气自然松弛，带一点笑意。'],
+  ['霸道总裁', '青年男性，嗓音低沉有磁性，语气从容自信，句尾略微下压，带压迫感与掌控力。'],
+  ['温柔女主持', '青年女性，音色温暖通透，语调平稳，咬字清晰，带职业化的亲切感。'],
+  ['动画萝莉', '少女或儿童音色，音调偏高，语速活泼，尾音轻挑，带二次元感。'],
+  ['沧桑老人', '老年男性，声音苍老略发抖，气息不足，语速缓慢，适合回忆独白。'],
+  ['御姐上司', '青年女性，冷艳御姐音，语气强势干练，语速中等偏快，质问时字字压下来。'],
+  ['阳光学长', '青年男性，清亮有少年感，语速轻快，语气真诚带笑意，像在鼓励人。'],
+  ['沙哑烟嗓', '中年男性，长期抽烟造成的沙哑烟嗓，共鸣偏低，语速偏慢，句尾下沉。'],
+  ['枕边气声', '青年女性，贴着麦克风说话的气声，音量极低，语速很慢，气息比字更明显。'],
+  ['低音炮旁白', '中年男性，极低的胸腔共鸣，每个字都压住，适合电影预告片旁白。'],
+  ['新闻主播', '新闻主播，音色端正中性，咬字标准，语速均匀，不带个人情绪。'],
+  ['说书先生', '评书先生，音色有年代感，节奏起伏大，关键处拖腔，一惊一乍。'],
+  ['客服坐席', '客服坐席，年轻女性，音色亲和，语速均匀，句尾轻微上扬表示征求。'],
+  ['游戏 NPC', '游戏角色旁白，音色略微失真带合成感，语调平直，句末机械下沉。'],
+  ['机器人合成', '机器人合成音，音高单一，节奏完全均等，几乎没有呼吸声和语气变化。'],
+  ['动漫高音', '动漫少女，音调很高、带明显鼻音，语速快，句尾挑起来。'],
+  ['病弱虚弱', '青年女性，气息很弱，音量小，句子中间频繁停顿换气，尾音散掉。'],
+  ['说书老生', '老年男性说书人，嗓子略沙哑但中气还足，节奏一板一眼，重音清楚。'],
+  ['孩童稚声', '儿童，音色稚嫩，个别字咬不准，语速快，句尾自然翘起。'],
+];
+
+const ALL_PRESETS = FF_PRESETS.concat(VD_PRESETS);
+
+/* FREEFORM · English 版（与中文条目一一对应，用于英文台本） */
+const FF_PRESETS_EN = [
+  ['Coquettish', 'Speak in a playful, coquettish tone: slightly sticky voice, rising sentence endings, a touch of nasal resonance.'],
+  ['Surprised', 'Speak with real surprise — pitch jumps up suddenly, as if you just heard great news.'],
+  ['Angry demand', 'Speak with suppressed anger, a bit faster, stressing the key words hard.'],
+  ['Hurt / tearful', 'Speak with a clear tearful edge, voice slightly trembling, slower pace, small breaths between sentences.'],
+  ['Tired rant', 'Sound drained after a long day: slower, low energy, sentence endings dropping off.'],
+  ['Bedtime story', 'Speak gently and slowly like telling a bedtime story, softly comforting a child.'],
+  ['Whispered soothing', 'Whisper close to the ear, breathy, very slow, low volume.'],
+  ['Mystery narration', 'Use a low, steady narration voice, clear pauses between sentences, restrained breath.'],
+  ['Sports coach', 'Sound like an encouraging sports coach: energetic and firm, driving rhythm, but do not shout.'],
+  ['Urgent sales pitch', 'Use an urgent, persuasive sales tone, stressing price and quantity.'],
+  ['Warm storytelling', 'Speak in a warm, intimate storytelling voice, unhurried, soft sentence endings.'],
+  ['Serious news read', 'Read like a news anchor: crisp articulation, even pitch, no emotional swings.'],
+  ['Hard close', 'Deliver a rapid-fire closing pitch, hammering the words "last three seconds" and "price", speeding up.'],
+  ['Unboxing delight', 'Like opening a gift: a short intake of breath first, then excited rising delivery.'],
+  ['Product explainer', 'Use a professional yet friendly explaining tone, articulate the terminology, short pauses between sentences.'],
+  ['Friend recommendation', 'Talk like a close friend recommending something: light, fast, with a confident "trust me" edge.'],
+  ['Price contrast', 'Contrast the two prices clearly — lift pitch and speed up on the cheaper one.'],
+  ['Villain standoff', 'Use a cold, low, threatening tone: slow, with pauses at sentence ends, weight on every word.'],
+  ['Suspense flashback', 'Narrate in a lowered, breathy voice with long pauses, as if afraid of being overheard.'],
+  ['Tragic monologue', 'A choked monologue: unstable breath, pause mid-sentence to catch air.'],
+  ['Sudden outburst', 'Explode suddenly: louder, faster, voice going hoarse at the end.'],
+  ['Guilty evasion', 'Mumble at low volume like making excuses, sentence endings trailing off.'],
+  ['Wuxia storyteller', 'Use a traditional Chinese storyteller cadence: big dynamics, draw out and then cut the ending.'],
+  ['Classical recital', 'Recite classical Chinese text: slightly drawn-out characters, falling closing tone.'],
+  ['Documentary VO', 'Calm, restrained documentary narration: dense information, no emotional sway.'],
+  ['Children picture book', 'Read a picture book to a child: exaggerated melody, lively onomatopoeia.'],
+  ['Phone brush-off', 'Like brushing someone off on the phone: fast, dismissive, slightly impatient endings.'],
+  ['Just woke up', 'Sound just woken up: hoarse and vague, slow, short of breath.'],
+  ['Laughing while speaking', 'Speak while laughing — breathy laugh escapes mid-sentence, rising endings.'],
+  ['Pretending calm', 'Try to sound composed: deliberately slower, but endings tremble slightly.'],
+];
+
+/* VOICE_DESIGN · English 版（描述「这个人是谁」） */
+const VD_PRESETS_EN = [
+  ['ASMR whisper', 'An ASMR whisper style: a woman whispering softly in English, heavy breathiness, very low volume, close to the mic, very slow pace.'],
+  ['Imperial empress', 'A stern empress from a palace drama: mature female voice, composed, stately slow pace, every word landed, calm surface with hidden edge.'],
+  ['Low middle-aged male', 'A middle-aged man with a low, husky voice, slightly rough breath, slow pace, calm and controlled — good for documentary narration.'],
+  ['Bright young male', 'A young male voice, bright and clean, light quick pace, relaxed and natural with a hint of smile.'],
+  ['CEO / boss', 'A young man with a low, magnetic voice, confident and unhurried, slight downward endings, a sense of control and pressure.'],
+  ['Warm female host', 'A young woman, warm and clear timbre, steady intonation, crisp articulation, professional friendliness.'],
+  ['Anime girl', 'A girl or child voice, high pitch, lively pace, light upward endings, anime feel.'],
+  ['Aged and weathered', 'An elderly man, aged and slightly trembling voice, short of breath, slow pace — good for memory monologues.'],
+  ['Cool female boss', 'A young woman with a cool, commanding voice, strong and efficient, medium-fast pace, words pressing down when questioning.'],
+  ['Sunny senior', 'A young man, bright and youthful, quick light pace, sincere with a smile, like encouraging someone.'],
+  ['Raspy smoker', 'A middle-aged man with a raspy smoker voice, low resonance, slow pace, falling endings.'],
+  ['Pillow whisper', 'A young woman whispering at the pillow: very low volume, very slow, breath louder than words.'],
+  ['Deep trailer VO', 'A middle-aged man with extreme chest resonance, every word pressed down — movie trailer narration.'],
+  ['News anchor', 'A news anchor: neutral, proper timbre, standard articulation, even pace, no personal emotion.'],
+  ['Traditional storyteller', 'A traditional storyteller with an old-fashioned timbre, big rhythmic swings, drawn-out key lines.'],
+  ['Call-center agent', 'A young woman call-center agent: friendly timbre, even pace, slight upward endings when asking.'],
+  ['Game NPC', 'A game character narrator: slightly synthetic timbre, flat delivery, mechanical falling endings.'],
+  ['Robot synth', 'A robotic synthetic voice: monotone pitch, strictly even rhythm, almost no breath or prosody.'],
+  ['Anime high pitch', 'An anime girl with a very high pitch, obvious nasality, fast pace, lifted endings.'],
+  ['Frail and weak', 'A young woman with very weak breath, low volume, frequent pauses to breathe, endings fading away.'],
+  ['Old male storyteller', 'An elderly male storyteller, slightly hoarse but still resonant, strict rhythm, clear stresses.'],
+  ['Child voice', 'A child: naive timbre, some words mispronounced, fast pace, endings naturally rising.'],
+];
+
+let presetLang = 'zh';
+
+function renderInstrBar(){
+  const bar = $('instrbar');
+  const t = $('task').value;
+  bar.innerHTML = '';
+  if(t !== 'FREEFORM' && t !== 'VOICE_DESIGN'){ bar.style.display = 'none'; return; }
+  bar.style.display = '';
+  const tip = document.createElement('span');
+  tip.textContent = (t === 'FREEFORM' ? 'FREEFORM 指令：' : 'VOICE_DESIGN 描述：');
+  tip.style.cssText = 'font-size:12px;color:var(--muted);align-self:center;margin-right:2px';
+  bar.appendChild(tip);
+  // 中英文分组：英文指令只对英文正文有效，不跟中文条目挤在一起
+  [['zh','中文'],['en','English']].forEach(([code, name])=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = (presetLang === code ? '● ' : '') + name;
+    b.title = code === 'en' ? '英文版描述，配合英文正文使用' : '中文版描述';
+    b.style.cssText = presetLang === code ? 'font-weight:600' : 'opacity:.7';
+    b.onclick = ()=>{ presetLang = code; renderInstrBar(); };
+    bar.appendChild(b);
+  });
+  const en = presetLang === 'en';
+  const list = t === 'FREEFORM' ? (en ? FF_PRESETS_EN : FF_PRESETS) : (en ? VD_PRESETS_EN : VD_PRESETS);
+  list.forEach(([name, text])=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = name;
+    b.title = text;
+    b.onclick = ()=>{
+      $('instr').value = text;
+      log('已填入' + (t === 'FREEFORM' ? ' FREEFORM 指令' : '音色风格') + '：' + name + (en ? '（英文）' : ''));
+    };
+    bar.appendChild(b);
+  });
+  if(t === 'FREEFORM'){
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.textContent = '音色风格（转 VOICE_DESIGN）';
+    more.title = '这些描述属于「这个人是谁」，要配合 VOICE_DESIGN 任务使用';
+    more.onclick = ()=>{
+      $('task').value = 'VOICE_DESIGN';
+      applyTask();
+      log('已切到 VOICE_DESIGN，可从下面选音色风格');
+    };
+    bar.appendChild(more);
+  }
+}
+
+function applyTask(){
+  const t = $('task').value, allow = TASK_ALLOW[t] || [];
+  const hasLang = LANG_TASKS.indexOf(t) !== -1;
+  const NAMES = {ctlSpeed:'语速', ctlPitch:'音高', ctlVolume:'音量', ctlEmotion:'情绪', ctlDialect:'方言', langId:'目标语言'};
+  const hidden = [];
+  ALL_CTLS.forEach(id=>{
+    const el = $(id);
+    if(!el) return;
+    const ok = id === 'langId' ? hasLang : id === 'instr' ? (allow.indexOf('instr') !== -1) : allow.indexOf(id) !== -1;
+    el.disabled = !ok;
+    el.title = ok ? '' : '当前任务不用这一项（发了也会被模型忽略）';
+    const f = el.closest('.field');
+    if(f){
+      f.classList.toggle('hide', !ok);
+      f.style.opacity = 1;
+    }
+    if(!ok && NAMES[id]) hidden.push(NAMES[id]);
+  });
+  $('instrwrap').classList.toggle('hide', allow.indexOf('instr') === -1);
+  const instrLab = {FREEFORM:'自由指令（描述怎么说：语气 / 节奏 / 重音 / 情绪强度）',
+                    VOICE_DESIGN:'音色风格描述（如 低沉沙哑的中年男声）',
+                    IP:'内置角色名（如 US_Emma / UK_George）'}[t];
+  if(instrLab) $('instrlabel').textContent = instrLab;
+  $('taskhidehint').textContent = hidden.length ? '按 ' + t + ' 已隐去 ' + hidden.length + ' 项无关参数：' + hidden.join(' / ') : '';
+  /* 音色来源：IP 只认内置角色名，整块无关；FREEFORM / 音色设计是可选的 */
+  const src = $('voicesrc');
+  if(src){
+    src.style.display = (t === 'IP') ? 'none' : '';
+    /* 自由指令 / 音色设计：只靠描述也能出声，参考音频收起来；其他任务必须选，默认展开 */
+    if(t !== 'IP') src.open = !(t === 'FREEFORM' || t === 'VOICE_DESIGN');
+  }
+  const srcHint = $('voicesrcHint');
+  if(srcHint) srcHint.textContent = (t === 'FREEFORM' || t === 'VOICE_DESIGN')
+    ? '可选 · 不选就按描述生成'
+    : '必须选一个本地音色当参考音频';
+  const ipb = $('ipblock');
+  if(ipb) ipb.hidden = (t !== 'IP');
+  /* 离开 IP 时，把自动填进自由指令框的音色名清掉，免得当描述用 */
+  if(t !== 'IP' && ipSelIp && $('instr').value === ipSelIp) $('instr').value = '';
+  /* 第一次切到 IP：自动把第一个角色 + 中性变体选上，省一次点击 */
+  if(t === 'IP' && voiceDataReady && !ipCharBase){
+    const first = ipVisibleGroups()[0];
+    if(first) selectIpChar(first);
+  }
+  const note = $('voicesrcNote');
+  if(note) note.textContent = (t === 'FREEFORM' || t === 'VOICE_DESIGN')
+    ? '可选：不选就按「自由指令 / 风格描述」生成；选了本地音色，音色会往参考音频靠。'
+    : '';
+  const tips = {
+    TTS: '只用参考音色正常朗读，不叠加语速/音高/音量/情绪；要调这三项请切到 BASIC。',
+    BASIC: '语速/音高/音量三项生效；情绪与方言不参与。',
+    EMOTION: '只发情绪（已默认中性，必须选一个）；语速/音高/音量/方言不参与。情绪弱时可改用 FREEFORM。',
+    DIALECT: '只发方言（粤语/川渝）；语速/情绪不参与。粤语/川渝的说话人相似度会低于 clone 模式。',
+    FREEFORM: '「自由指令」当描述，其余参数不参与；情绪放大靠这一项。',
+    VOICE_DESIGN: '「自由指令」当音色风格描述（如 低沉沙哑的中年男声），语速/音高/音量可叠加。',
+    IP: '「自由指令」填内置角色名（如 US_Emma / UK_George / UK_Charlotte）。',
+  };
+  let hint = tips[t] || '';
+  const langSel = $('langId');
+  if(langSel && langSel.value && hasLang){
+    hint += langSel.value === 'en' ? ' 目标语言：英语。' :
+      ' 目标语言：' + langSel.selectedOptions[0].textContent + '（走 MULTILINGUAL，需要参考音频）。';
+  }
+  $('taskhint').textContent = hint;
+  [...($('taskchips') ? $('taskchips').children : [])].forEach(c=>c.classList.toggle('on', c.dataset.t === t));
+  if($('sbTask')) $('sbTask').textContent = '任务 ' + t;
+  syncVdgen();
+  renderInstrBar();
+}
+
+/* 结构化音色配方面板只在 VOICE_DESIGN 下出现 */
+function syncVdgen(){
+  const el = $('vdgen');
+  if(!el) return;
+  el.style.display = $('task').value === 'VOICE_DESIGN' ? '' : 'none';
+}
+
+/* 按官方 12 项结构化属性拼一条音色描述（比自由描述更稳） */
+const VD_FIELDS = [
+  ['性别', 'gdSex'], ['音高', 'gdPitch'], ['语速', 'gdSpeed'], ['音量', 'gdVol'],
+  ['年龄', 'gdAge'], ['清晰度', 'gdClarity'], ['流畅度', 'gdFluency'], ['口音', 'gdAccent'],
+  ['音色质感', 'gdTimbre'], ['情绪', 'gdEmo'], ['语调', 'gdTone'], ['性格', 'gdChar'],
+];
+$('vdgenGo').onclick = ()=>{
+  const txt = VD_FIELDS.map(([k, id])=> k + ': ' + $(id).value + '.').join(' ');
+  $('task').value = 'VOICE_DESIGN';
+  $('instr').value = txt;
+  applyTask();
+  log('已生成结构化音色描述（' + txt.length + ' 字），可直接点生成', 's');
+};
+$('langId').onchange = ()=>{ applyTask(); log('目标语言：' + ($('langId').selectedOptions[0].textContent)); };
+/* IP 属性标签的绑定在 renderIpChars 上方统一处理 */
+/* 任务 chips：底层还是 #task 这个 select，点 chip 只改它的值 */
+(function renderTaskChips(){
+  const box = $('taskchips'), sel = $('task');
+  if(!box || !sel) return;
+  const LABELS = {TTS:'TTS', BASIC:'BASIC', EMOTION:'情绪', DIALECT:'方言', FREEFORM:'自由指令', VOICE_DESIGN:'音色设计', IP:'IP'};
+  [...sel.options].forEach(o=>{
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'tchip'; b.dataset.t = o.value;
+    b.textContent = LABELS[o.value] || o.value;
+    b.title = o.textContent;
+    b.onclick = ()=>{
+      if(sel.value === o.value) return;
+      sel.value = o.value; applyTask();
+      log('任务 → ' + o.textContent);
+    };
+    box.appendChild(b);
+  });
+})();
+
+$('task').onchange = applyTask;
+/* 音色路径 / 参考音频变了，就刷新「这次生成会读什么」的说明 */
+$('refMode').onchange = ()=>{ renderRefStatus(); setStep(2); };
+$('voice').onchange = ()=>{ renderRefStatus(); setStep(2); };
+$('vfile').onchange = renderRefStatus;
+$('vref').oninput = renderRefStatus;
+
+$('ipVoice').onchange = ()=>{
+  const ip = $('ipVoice').value;
+  if(!ip){ log('已取消内置音色'); return; }
+  $('task').value = 'IP';
+  $('instr').value = ip;
+  applyTask();
+  log('内置音色：' + ip + '（已切到 IP 任务，不用参考音频）');
+};
+/* ---------- 常用文案模板 ---------- */
+const TEMPLATES = [
+  ['网文旁白', '夜色压得很低，风里带着咸味。他站在码头尽头，手里攥着那封没有寄出的信。远处的灯塔亮了一下，又灭了。'],
+  ['短剧开场', '你以为我只是个普通助理？错了。三年了，我手里握着的把柄，足够让你今晚就滚出董事会。'],
+  ['撒娇女友', '你终于回来啦。我等你好久了，饭都热了两遍。快点过来，让我抱一下，就一下。'],
+  ['霸总台词', '合同我看过了。条件加一倍，人留下来。给你三分钟考虑，别让我说第二遍。'],
+  ['带货口播', '这款我自己用了三个月。不夸张地说，回购了六次。今天直播间的价格，比平时低一半。'],
+  ['深夜电台', '现在是凌晨一点。如果你还醒着，说明今天心里装了事。没关系，我陪你把这半小时熬完。'],
+  ['科普口播', '为什么天空是蓝的？简单说，蓝光波长短，更容易被空气分子撞散。所以你看哪儿都是蓝的。'],
+  ['悬疑旁白', '第一个人失踪那天，下了整夜的雨。第二个人的证词，和监控差了整整七分钟。'],
+];
+
+(function buildTplBar(){
+  const bar = $('tplbar');
+  const tip = document.createElement('span');
+  tip.textContent = '模板：';
+  tip.style.cssText = 'font-size:12px;color:var(--muted);align-self:center;margin-right:2px';
+  bar.appendChild(tip);
+  TEMPLATES.forEach(([name, text])=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = name;
+    b.title = '填入「' + name + '」示例文案（会覆盖当前文本）';
+    b.onclick = ()=>{
+      $('input').value = text;
+      updateCount();
+      log('已填入模板：' + name + '（' + text.length + ' 字）');
+    };
+    bar.appendChild(b);
+  });
+})();
+
+
+/* ---------- 服务管家（本地 8766，负责一键启停两套引擎） ---------- */
+const HOST = 'http://127.0.0.1:8766';
+let hostBusy = false, hostOk = false;
+
+function hostButtons(){
+  ['bStartOff','bStartFast','bStopAll','bRefresh','bStop'].forEach(id=>{
+    const el = $(id); if(el) el.disabled = hostBusy || !hostOk;
+  });
+}
+
+async function hostStatus(){
+  try{
+    const r = await fetch(HOST + '/status', {cache:'no-store'});
+    const j = await r.json();
+    hostOk = true;
+    const v = j.vram || {};
+    const txt = `管家正常 · 完整模式 ${j.official ? '运行中' : '未启动'} · 快速模式 ${j.fast ? '运行中' : '未启动'} · 显存 ${v.used >= 0 ? v.used + 'MB' : '未知'} · C盘可用 ${j.c_free_gb}GB`;
+    $('svchint').textContent = txt;
+    $('svchint').title = txt;
+  }catch(e){
+    hostOk = false;
+    const txt = '服务管家没起来：双击「启动Ming控制台.cmd」，浏览器会自动打开本页；之后启停都在这里点。';
+    $('svchint').textContent = txt;
+    $('svchint').title = txt;
+    if($('sbState')) $('sbState').textContent = '服务管家未运行';
+    if($('sbDot')) $('sbDot').className = 'dot err';
+  }
+  hostButtons();
+}
+
+async function hostCall(path, label){
+  if(!hostOk){ log('服务管家未运行，无法' + label, 'e'); return; }
+  hostBusy = true; hostButtons();
+  log('请求管家：' + label + '（可能要等 1~3 分钟，模型冷启动慢）', 's');
+  try{
+    const r = await fetch(HOST + path, {method:'POST'});
+    const j = await r.json();
+    if(j.ok) log('管家返回：' + label + ' 成功', 's');
+    else log('管家返回：' + label + ' 失败 ' + (j.error || ''), 'e');
+  }catch(e){
+    log('管家请求失败: ' + e.message, 'e');
+  }finally{
+    hostBusy = false;
+    await hostStatus(); await checkHealth(); await checkOfficial();
+  }
+}
+
+$('bStartOff').onclick = ()=> hostCall('/start?engine=official', '启动完整模式');
+$('bStartFast').onclick = ()=> hostCall('/start?engine=fast', '启动快速模式');
+$('bStopAll').onclick = ()=> hostCall('/stop?engine=all', '全部停止');
+$('bRefresh').onclick = ()=>{ hostStatus(); checkHealth(); checkOfficial(); };
+/* 预留双开入口（显存不够时不要放开）：
+$('bStartBoth').onclick = async ()=>{
+  if(!hostOk){ log('服务管家未运行', 'e'); return; }
+  await hostCall('/start?engine=official', '启动完整模式');
+  await hostCall('/start?engine=fast', '启动快速模式');
+};
+*/
+
+/* ---------- 官方完整模式（8010） ---------- */
+const SPK = {pt: '', voice: ''};
+function b64ToBlob(b64, type){
+  const bin = atob(b64);
+  const u8 = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) u8[i] = bin.charCodeAt(i);
+  return new Blob([u8], {type: type || 'audio/wav'});
+}
+
+async function synthOfficial(text, over){
+  over = over || {};
+  const task = over.task || $('task').value;
+  const noRef = (task === 'IP' || task === 'FREEFORM' || task === 'VOICE_DESIGN');
+  const vsel = over.voice !== undefined ? over.voice : $('voice').value;
+  if(!noRef && !vsel.startsWith('local:')){
+    throw new Error('完整模式需要先在「任务与音色」里选一个本地音色当参考音频；用内置角色 / 自由指令 / 音色设计可以不需要参考音频');
+  }
+  if(!db) db = await openDB();
+
+  // 只发当前任务真正吃的控制项：TTS 发了也会被服务端丢掉，这里直接不发
+  const allowCtl = TASK_ALLOW[task] || [];
+  const controls = {};
+  if(allowCtl.indexOf('ctlSpeed') !== -1) controls.speed = $('ctlSpeed').value;
+  if(allowCtl.indexOf('ctlPitch') !== -1) controls.pitch = $('ctlPitch').value;
+  if(allowCtl.indexOf('ctlVolume') !== -1) controls.volume = $('ctlVolume').value;
+  if(allowCtl.indexOf('ctlDialect') !== -1) controls.dialect = $('ctlDialect').value;
+  if(allowCtl.indexOf('ctlEmotion') !== -1) controls.emotion = $('ctlEmotion').value;
+
+  const instrText = over.instr !== undefined ? over.instr : $('instr').value.trim();
+  const lang = over.lang !== undefined ? over.lang : ($('langId').value || '');
+
+  /* FREEFORM / VOICE_DESIGN 没选本地音色时，服务端在 clone 下会强制要求逐字稿而直接 400；
+     这两类本来就靠描述自带音色，所以无参考音频时按 style 发。 */
+  const sendMode = ((task === 'FREEFORM' || task === 'VOICE_DESIGN') && !vsel.startsWith('local:')) ? 'style' : mode;
+
+  const body = {
+    text: text,
+    mode: sendMode,
+    task: task,
+    controls: controls,
+    instruction: instrText,
+    max_retries: 2,
+  };
+  if(lang) body.language_id = lang;
+
+  if(task === 'IP'){
+    const ip = (over.ip || $('ipVoice').value || instrText || '').trim();
+    if(!ip) throw new Error('IP 任务需要一个内置音色名（上方「内置音色 / 角色」里选）');
+    body.controls = {ip: ip};
+    body.instruction = '';
+  }else if(task === 'FREEFORM' || task === 'VOICE_DESIGN'){
+    // 这两类靠描述自带音色，官方建议不传参考音频；想叠自己音色也可以手动选一个
+    if(vsel.startsWith('local:')){
+      const rec = await idbGet(vsel.slice(6));
+      if(!rec) throw new Error('本地音色「' + vsel.slice(6) + '」不在库里');
+      body.ref_audio = 'data:audio/wav;base64,' + abToBase64(rec.wav);
+      if(mode === 'clone') body.ref_text = rec.ref_text;
+    }
+    if(!body.instruction) throw new Error((task === 'FREEFORM' ? '自由指令' : '音色风格描述') + '不能为空，可点下方预置模板');
+  }else{
+    const rec = await idbGet(vsel.slice(6));
+    if(!rec) throw new Error('本地音色「' + vsel.slice(6) + '」不在库里');
+    body.ref_audio = 'data:audio/wav;base64,' + abToBase64(rec.wav);
+    if(mode === 'clone'){
+      body.ref_text = rec.ref_text;
+      // 逐字稿和音频对不上，prompt 路径的开头就会串成参考音频的内容：合成前先拦
+      const rmode = ($('refMode') && $('refMode').value) || 'spk';
+      if(rmode !== 'spk'){
+        const chk = await checkTranscript(rec, rec.ref_text);
+        if(!chk.ok){
+          throw new Error('逐字稿与参考音频对不上（相似度 ' + chk.score.toFixed(2) +
+            '），开头会串成参考音频的内容。识别结果是「' + chk.asr +
+            '」—— 点「按音频自动转写」替换后再合成，或把「音色路径」切到纯净音色嵌入。');
+        }
+      }
+    }
+  }
+
+  const seed = $('seed').value.trim();
+  if(seed) body.seed = +seed;
+
+  // 高级参数：只有动过才传，服务端默认值与这里保持一致
+  if($('advCfg')) body.cfg = parseFloat($('advCfg').value) || 2.0;
+  if($('advSigma')) body.sigma = parseFloat($('advSigma').value);
+  if($('advTemp')) body.temperature = parseFloat($('advTemp').value);
+  if($('advTrim')) body.trim_silence = $('advTrim').checked;
+  if($('advReuse')) body.reuse_ref = $('advReuse').checked;
+  if($('advRaw')) body.raw_text = $('advRaw').checked;
+  if($('advVerify')) body.verify_text = $('advVerify').checked;
+  if($('advGap')) body.gap = parseFloat($('advGap').value);
+  if($('advSplit')) body.max_length = parseInt($('advSplit').value, 10) || 24;
+  if($('vdEn')) body.instruction_schema = $('vdEn').checked ? 'en' : '';
+  if(over.segOnly) body.seg_only = over.segOnly;
+  if(SPK.pt && SPK.voice === vsel && !noRef) body.spk_emb = SPK.pt;
+  // 音色路径：默认纯净嵌入；prompt / prompt_emb 走参考音频提示（后者再叠说话人嵌入，官方写法）
+  if(mode === 'clone' && body.ref_audio && !body.spk_emb && $('refMode')){
+    const rm = $('refMode').value;
+    if(rm !== 'spk') body.ref_mode = rm;
+  }
+
+  // 把真正要送出去的内容留一份（参考音频只记大小，避免把 base64 灌进面板）
+  try{
+    const shown = Object.assign({}, body);
+    if(shown.ref_audio) shown.ref_audio = '[base64 ' + shown.ref_audio.length + ' 字符]';
+    if(shown.spk_emb) shown.spk_emb = '[pt ' + shown.spk_emb.length + ' 字符]';
+    $('reqjson').textContent = JSON.stringify(shown, null, 2);
+  }catch(e){}
+
+  const r = await fetch(OFF + '/tts', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+    signal: aborter ? aborter.signal : undefined,
+  });
+  if(!r.ok){
+    const txt = await r.text();
+    throw new Error(`HTTP ${r.status} ${txt.slice(0,200)}`);
+  }
+  const j = await r.json();
+  if(!j.ok) throw new Error('服务返回失败：' + JSON.stringify(j.log || j).slice(0,200));
+  for(const line of (j.log || [])) log('  ' + line);
+  const b64 = j.audio.slice(j.audio.indexOf(',') + 1).replace(/\s/g, '');
+  const blob = b64ToBlob(b64, 'audio/wav');
+  return {blob, segments: j.segments, dur: j.duration, rms: j.rms,
+          sim: j.sim, gap: j.gap, segAudio: j.segments_audio || [], segMeta: j.segments_meta || [],
+          durCheck: j.dur_check || [], text: text, over: over};
+}
+
+async function runOfficial(text, over, label, quiet){
+  over = over || {};
+  label = label || '';
+  const fmt = 'wav', t0 = performance.now();
+  const task = over.task || $('task').value;
+  log(`${label ? label + ' · ' : ''}完整模式 · ${mode} · 任务 ${task} · ${visibleLen(text)} 字`);
+  setProgress(0.15);
+  const r = await synthOfficial(text, over);
+  setProgress(1);
+  const secs = (performance.now()-t0)/1000;
+  const simTxt = (r.sim === null || r.sim === undefined) ? '' : ` · 像不像 <b>${r.sim}</b>`;
+  // 时长校验：期望（字数/4.5 秒）与实际；重试过几次（>1 说明首轮不合格已自动换种子重来）
+  let durTxt = '';
+  if(r.durCheck && r.durCheck.length){
+    const dc = r.durCheck[0];
+    const tries = Math.max.apply(null, r.durCheck.map(x => x.attempts || 1));
+    const bad = dc.expected && (r.dur < dc.expected * 0.55 || r.dur > dc.expected * 3.0 + 2);
+    durTxt = ` · 时长 <b>${r.dur}</b>/<b>${dc.expected}</b>s${bad ? ' <span style="color:#e06">严重异常</span>' : ''}${tries > 1 ? ` · 重试 <b>${tries}</b> 次` : ''}`;
+  }
+  // ASR 内容校验：念出来的字对不对（对率低说明这版是噪音/串词，服务端会自动换种子重跑）
+  let asrTxt = '';
+  const metas = r.segMeta || [];
+  const rates = metas.map(m => m.asr_sim).filter(v => v !== undefined && v !== null);
+  if(rates.length){
+    const worst = Math.min.apply(null, rates);
+    const okAll = metas.every(m => m.content_ok !== false);
+    asrTxt = ` · ASR 对率 <b>${worst}</b>${okAll ? '' : ' <span style="color:#e06">内容不合格</span>'}`;
+  }
+  const desc = `分段 <b>${r.segments}</b> 段 · 时长 <b>${r.dur}</b> 秒 · 音量 <b>${r.rms}</b> dB${simTxt}${durTxt}${asrTxt} · 文件 <b>${(r.blob.size/1024).toFixed(0)}</b> KB · 耗时 <b>${secs.toFixed(1)}</b> 秒 · 模式 <b>${mode}</b> · 任务 <b>${task}</b>`;
+  if(!quiet) showResult(r.blob, desc, over.name ? over.name + '.wav' : `ming_${mode}_${stamp()}.${fmt}`);
+  renderSegs(r);
+  await pushHistory((label ? label + ' ' : '') + task, desc, r.blob, text, over);
+  log('完成，' + desc.replace(/<\/?b>/g,''), 's');
+  return r;
+}
+
+/* ---------- 分段结果：逐段试听 + 单段重生 ---------- */
+let LAST = null;
+
+function renderSegs(r){
+  const tb = $('seglist');
+  if(!tb) return;
+  if(!r || !r.segMeta || !r.segMeta.length || r.segMeta.length <= 1){
+    tb.innerHTML = '<tr><td colspan="5" style="color:var(--muted)">本次只有 1 段，不需要逐段返工</td></tr>';
+    LAST = r;
+    return;
+  }
+  LAST = r;
+  const blobs = r.segAudio.map(b64 => b64ToBlob(b64.replace(/\s/g,''), 'audio/wav'));
+  LAST.segBlobs = blobs;
+  tb.innerHTML = '';
+  r.segMeta.forEach((m, i)=>{
+    const seg = m.seg || (i+1);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${seg}</td><td>${m.duration}s</td><td>${m.rms}dB</td>` +
+      `<td>${m.sim === null || m.sim === undefined ? '—' : m.sim}</td><td></td>`;
+    const td = tr.lastElementChild;
+    const u = URL.createObjectURL(blobs[i]);
+    const play = document.createElement('button');
+    play.className = 'danger'; play.textContent = '试听';
+    play.onclick = ()=>{ $('player').src = u; $('player').play(); log('试听第 ' + seg + ' 段'); };
+    const redo = document.createElement('button');
+    redo.className = 'danger'; redo.textContent = '重生'; redo.style.marginLeft = '4px';
+    redo.onclick = ()=>regenSeg(seg, redo);
+    td.appendChild(play); td.appendChild(redo); tb.appendChild(tr);
+  });
+  $('seghint').textContent = `共 ${r.segMeta.length} 段 · 段间静音 ${r.gap || 0.35}s · 哪段糊了就点「重生」`;
+}
+
+async function regenSeg(idx, btn){
+  if(!LAST) return;
+  const oldTxt = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = '…'; }
+  log(`第 ${idx} 段重生中…`);
+  try{
+    const rr = await synthOfficial(LAST.text, Object.assign({}, LAST.over, {segOnly: idx}));
+    LAST.segBlobs[idx-1] = rr.blob;
+    if(LAST.segMeta && LAST.segMeta[idx-1]){
+      LAST.segMeta[idx-1].duration = rr.dur;
+      LAST.segMeta[idx-1].rms = rr.rms;
+      LAST.segMeta[idx-1].sim = rr.sim;
+    }
+    const bufs = [];
+    for(const b of LAST.segBlobs) bufs.push(await blobToBuffer(b));
+    const gap = LAST.gap || 0.35;
+    const merged = await concatBuffers(bufs, gap);
+    const totalDur = bufs.reduce((a,b)=>a+b.duration,0) + gap*(bufs.length-1);
+    const sims = LAST.segMeta.map(m=>m.sim).filter(s=>s!==null && s!==undefined);
+    const avg = sims.length ? (sims.reduce((a,b)=>a+b,0)/sims.length).toFixed(3) : null;
+    const desc = `分段 <b>${bufs.length}</b> 段（第 ${idx} 段已重生） · 时长 <b>${totalDur.toFixed(2)}</b> 秒 · ` +
+                 (avg ? `像不像 <b>${avg}</b> · ` : '') + `段间静音 ${gap}s`;
+    showResult(merged, desc, `ming_${stamp()}.wav`);
+    renderSegs(LAST);
+    log(`第 ${idx} 段重生完成，已重新拼接（${totalDur.toFixed(2)}s）`, 's');
+  }catch(e){
+    log('单段重生失败: ' + e.message, 'e');
+    if(btn){ btn.disabled = false; btn.textContent = oldTxt || '重生'; }
+  }
+}
+
+
+const HISTORY = [];
+async function pushHistory(title, desc, blob, text, over){
+  const rec = {id: Date.now() + Math.random(), t: stamp(), title: title, desc: desc,
+               text: text, over: JSON.parse(JSON.stringify(over || {})),
+               wav: await blob.arrayBuffer()};
+  const url = URL.createObjectURL(blob);
+  HISTORY.unshift({...rec, url: url});
+  while(HISTORY.length > 30){
+    const old = HISTORY.pop();
+    URL.revokeObjectURL(old.url);
+    histDel(old.id).catch(()=>{});
+  }
+  renderHistory();
+  try{ if(!db) db = await openDB(); await histPut(rec); }catch(e){ log('历史写入失败: ' + e.message, 'e'); }
+}
+
+async function loadHistory(){
+  try{
+    if(!db) db = await openDB();
+    const rows = await histAll();
+    rows.sort((a,b)=>b.id - a.id);
+    HISTORY.length = 0;
+    rows.slice(0,30).forEach(r=>{
+      HISTORY.push({...r, url: URL.createObjectURL(new Blob([r.wav], {type:'audio/wav'}))});
+    });
+    renderHistory();
+    if(HISTORY.length) log('已载入本机历史 ' + HISTORY.length + ' 条（存 IndexedDB，刷新不丢）');
+  }catch(e){ log('历史载入失败: ' + e.message, 'e'); }
+}
+
+function renderHistory(){
+  const tb = $('hlist');
+  if(!tb) return;
+  tb.innerHTML = '';
+  if(!HISTORY.length){
+    tb.innerHTML = '<tr><td colspan="3" style="color:var(--muted)">还没有生成记录</td></tr>';
+    return;
+  }
+  HISTORY.forEach((h, i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td style="white-space:nowrap">${h.t.slice(9)}</td><td>${h.title}</td><td></td>`;
+    const td = tr.lastElementChild;
+    const play = document.createElement('button');
+    play.className = 'danger'; play.textContent = '试听';
+    play.onclick = ()=>{ $('player').src = h.url; $('player').play(); log('试听历史 #' + (i+1) + '：' + h.title); };
+    const rerun = document.createElement('button');
+    rerun.className = 'danger'; rerun.textContent = '重跑'; rerun.style.marginLeft = '4px';
+    rerun.onclick = async ()=>{
+      cancelled = false; aborter = new AbortController(); setBusy(true); setProgress(0);
+      try{ await runOfficial(h.text, h.over, '历史重跑'); }
+      catch(e){ log('重跑失败: ' + e.message, 'e'); }
+      finally{ setBusy(false); aborter = null; }
+    };
+    const del = document.createElement('button');
+    del.className = 'danger'; del.textContent = '删'; del.style.marginLeft = '4px';
+    del.onclick = async ()=>{
+      URL.revokeObjectURL(h.url);
+      HISTORY.splice(i,1); await histDel(h.id).catch(()=>{}); renderHistory();
+    };
+    td.appendChild(play); td.appendChild(rerun); td.appendChild(del); tb.appendChild(tr);
+  });
+}
+
+function stamp(){
+  const d = new Date();
+  const p = n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+$('go').onclick = async ()=>{
+  const text = $('input').value.trim();
+  if(!text){ alert('先输入要合成的文字'); return; }
+  cancelled = false; aborter = new AbortController();
+  setBusy(true); setProgress(0);
+
+  try{
+    if(engine === 'official'){ await runOfficial(text); return; }
+    const fmt = $('format').value;
+    const t0 = performance.now();
+    const parts = buildParts(text);
+    log(`共 ${parts.length} 段` + ($('mergeshort').checked ? '（已把少于 15 字的短句并入相邻句）' : ''));
+    const bufs = [];
+    for(let i=0;i<parts.length;i++){
+      if(cancelled) throw new Error('已取消');
+      setProgress(i/parts.length);
+      log(`第 ${i+1}/${parts.length} 段，${parts[i].length} 字：「${parts[i].length>28?parts[i].slice(0,28)+'…':parts[i]}」`);
+      const r = await synthSegment(parts[i]);
+      log(`第 ${i+1} 段完成：${r.dur.toFixed(2)}s / ${r.rms.toFixed(1)}dB / ${r.mode}`, 's');
+      if(parts.length === 1){
+        const secs = (performance.now()-t0)/1000;
+        const info = `格式 <b>${fmt}</b> · 时长 <b>${r.dur.toFixed(2)}</b> 秒 · 音量 <b>${r.rms.toFixed(1)}</b> dB · 文件 <b>${(r.blob.size/1024).toFixed(0)}</b> KB · 耗时 <b>${secs.toFixed(1)}</b> 秒 · 音色 <b>${$('voice').value}</b> · 模式 <b>${r.mode}</b>`;
+        showResult(r.blob, info, `ming_${stamp()}.${fmt}`);
+        log('完成，' + info.replace(/<\/?b>/g,''), 's');
+        return;
+      }
+      bufs.push(r.buf);
+    }
+    setProgress(1);
+    const merged = await concatBuffers(bufs, 0.18);
+    const secs = (performance.now()-t0)/1000;
+    const dur = bufs.reduce((a,b)=>a+b.duration,0) + 0.18*(bufs.length-1);
+    const info = `分段 <b>${bufs.length}</b> 段拼接 · 时长 <b>${dur.toFixed(2)}</b> 秒 · 文件 <b>${(merged.size/1024).toFixed(0)}</b> KB · 总耗时 <b>${secs.toFixed(1)}</b> 秒 · 音色 <b>${$('voice').value}</b>`;
+    showResult(merged, info, `ming_${stamp()}.wav`);
+    log('完成，' + info.replace(/<\/?b>/g,''), 's');
+  }catch(e){
+    if(cancelled){ log('已取消','e'); toast('已停止','warn'); }
+    else{ log('合成失败: ' + e.message, 'e'); toast('合成失败：' + e.message, 'err'); }
+  }finally{
+    setBusy(false); aborter = null;
+  }
+};
+
+$('stop').onclick = ()=>{ cancelled = true; if(aborter) aborter.abort(); };
+
+/* ---------- 保存本地音色 ---------- */
+$('upload').onclick = async ()=>{
+  const name = $('vname').value.trim();
+  const file = $('vfile').files[0];
+  const ref = $('vref').value.trim();
+  if(!name){ alert('填个音色名'); return; }
+  if(!file){ alert('选一个参考音频'); return; }
+  if(!ref){ alert('参考文本必须填，模型只在这段文本存在时才用参考音色'); return; }
+  try{
+    log('处理参考音频 ' + file.name + '（' + (file.size/1024).toFixed(0) + ' KB）');
+    const decoded = await blobToBuffer(file);
+    const pcmRaw = await toMono44k(decoded);
+    const cleaned = autoClean(pcmRaw, 44100);
+    const wav = encodeWav(cleaned.pcm, 44100, 1);
+    const seconds = cleaned.seconds;
+    if(cleaned.trimmed) log(`已自动去掉首尾静音 / 截取最响的 20 秒：${decoded.duration.toFixed(1)}s → ${seconds.toFixed(1)}s`);
+    if(seconds < 4){ log('注意：参考音频只有 ' + seconds.toFixed(1) + ' 秒，太短音色抓不准，建议 10–20 秒', 'e'); }
+    if(seconds > 30){ log('注意：参考音频 ' + seconds.toFixed(1) + ' 秒偏长，建议截到 20 秒内', 'e'); }
+    await idbPut({name, ref_text: ref, wav: await wav.arrayBuffer(), seconds, created: Date.now()});
+    log('已保存到本地音色库：' + name + '（' + seconds.toFixed(1) + ' 秒，重采样到 44.1k 单声道）', 's');
+    $('vname').value = ''; $('vref').value = ''; $('vfile').value = '';
+    await loadVoices();
+    const sel = $('voice');
+    if([...sel.options].some(o=>o.value === 'local:' + name)){
+      sel.value = 'local:' + name;
+      log('已设为当前音色：' + name);
+    }
+    renderRefStatus();
+  }catch(e){ log('保存失败: ' + e.message, 'e'); }
+};
+
+/* ---------- A/B 对比 ---------- */
+$('abGo').onclick = async ()=>{
+  if(engine !== 'official'){ log('A/B 对比只在完整模式下可用', 'e'); return; }
+  const text = $('input').value.trim();
+  if(!text){ alert('先在文本框里放一段要对比的文字'); return; }
+  const bTask = $('abTask').value;
+  const bVoice = $('abVoice').value;
+  const bInstr = $('abInstr').value.trim();
+  if(bTask === 'IP' && !bVoice && !bInstr){
+    alert('B 组选了 IP 任务，请选一个内置音色，或在指令里填音色名');
+    return;
+  }
+  cancelled = false; aborter = new AbortController();
+  setBusy(true); setProgress(0);
+  try{
+    log('A/B 对比：同一段文字，先跑 A（当前设置），再跑 B（对比设置）', 's');
+    const a = await runOfficial(text, {}, 'A', true);
+    $('abA').src = URL.createObjectURL(a.blob);
+    $('abhint').textContent = `A：${$('task').value} · ${a.dur}s · ${a.rms}dB`;
+
+    const bOver = {task: bTask, instr: bInstr || undefined, ip: bVoice || undefined};
+    setProgress(0.5);
+    const b = await runOfficial(text, bOver, 'B', true);
+    $('abB').src = URL.createObjectURL(b.blob);
+    $('abhint').textContent = `A ${a.dur}s / ${a.rms}dB ｜ B ${b.dur}s / ${b.rms}dB`;
+    log(`对比完成：A ${a.dur}s（${$('task').value}） vs B ${b.dur}s（${bTask}）`, 's');
+  }catch(e){
+    if(cancelled) log('A/B 已取消', 'e');
+    else log('A/B 失败: ' + e.message, 'e');
+  }finally{
+    setBusy(false); aborter = null;
+  }
+};
+
+/* ---------- 高级参数：滑杆显示 + 说话人嵌入缓存 ---------- */
+$('advSigma').oninput = ()=>{ $('sigval').textContent = (+$('advSigma').value).toFixed(2); };
+$('advTemp').oninput = ()=>{ $('tmval').textContent = (+$('advTemp').value).toFixed(2); };
+
+$('spkGo').onclick = async ()=>{
+  if(engine !== 'official'){ log('说话人嵌入缓存只在完整模式下可用', 'e'); return; }
+  const vsel = $('voice').value;
+  if(!vsel.startsWith('local:')){ alert('先在右栏「本地音色」里选一个参考音色'); return; }
+  try{
+    const rec = await idbGet(vsel.slice(6));
+    if(!rec) throw new Error('本地音色不在库里');
+    $('spkhint').textContent = '正在提取说话人嵌入…';
+    const r = await fetch(OFF + '/spkemb', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ref_audio: 'data:audio/wav;base64,' + abToBase64(rec.wav)}),
+    });
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error || '提取失败');
+    SPK.pt = j.pt; SPK.voice = vsel;
+    $('spkSave').disabled = false;
+    $('spkhint').textContent = `已缓存音色嵌入（${(j.size/1024).toFixed(1)} KB），合成时会自动带上`;
+    log('说话人嵌入已缓存，大小 ' + (j.size/1024).toFixed(1) + ' KB', 's');
+  }catch(e){
+    $('spkhint').textContent = '提取失败：' + e.message;
+    log('提取说话人嵌入失败: ' + e.message, 'e');
+  }
+};
+
+/* 把缓存的嵌入导出成 .pt 文件，换机器/换浏览器直接导入复用 */
+$('spkSave').onclick = ()=>{
+  if(!SPK.pt){ alert('先点「提取并缓存说话人嵌入」'); return; }
+  const name = (SPK.voice || 'voice').replace(/^local:/, '') + '.pt';
+  const a = document.createElement('a');
+  a.href = 'data:application/octet-stream;base64,' + SPK.pt;
+  a.download = name; a.click();
+  log('已导出音色嵌入 ' + name);
+};
+
+$('spkLoad').onclick = ()=> $('spkFile').click();
+$('spkFile').onchange = async ()=>{
+  const f = $('spkFile').files[0];
+  if(!f) return;
+  try{
+    const b64 = await new Promise((res, rej)=>{
+      const fr = new FileReader();
+      fr.onload = ()=> res(String(fr.result).split(',')[1]);
+      fr.onerror = ()=> rej(fr.error);
+      fr.readAsDataURL(f);
+    });
+    SPK.pt = b64; SPK.voice = 'default';
+    $('spkSave').disabled = false;
+    $('spkhint').textContent = `已导入 ${f.name}（${(f.size/1024).toFixed(1)} KB），合成时会自动带上`;
+    log('已导入音色嵌入 ' + f.name, 's');
+  }catch(e){ log('导入音色嵌入失败: ' + e.message, 'e'); }
+  $('spkFile').value = '';
+};
+
+/* ---------- 批量长文导出 ---------- */
+$('batchGo').onclick = async ()=>{
+  if(engine !== 'official'){ log('批量导出只在完整模式下可用', 'e'); return; }
+  const lines = $('batchText').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  if(!lines.length){ alert('先把稿件粘进批量框，一行一条'); return; }
+  const prefix = ($('batchName').value.trim() || 'ming_batch').replace(/[\\/:*?"<>|]/g, '_');
+  cancelled = false; aborter = new AbortController();
+  setBusy(true); setProgress(0);
+  let ok = 0, fail = 0;
+  log(`批量开始：${lines.length} 条，前缀 ${prefix}`, 's');
+  for(let i=0;i<lines.length;i++){
+    if(cancelled){ log('批量已取消', 'e'); break; }
+    setProgress(i/lines.length);
+    const nm = `${prefix}_${String(i+1).padStart(2,'0')}`;
+    try{
+      const r = await runOfficial(lines[i], {name: nm}, `批量 ${i+1}/${lines.length}`, true);
+      const url = URL.createObjectURL(r.blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = nm + '.wav'; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url), 3000);
+      ok++;
+      log(`批量 ${i+1}/${lines.length} 已保存 ${nm}.wav（${r.dur}s / ${r.rms}dB）`, 's');
+    }catch(e){
+      fail++;
+      log(`批量 ${i+1}/${lines.length} 失败: ${e.message}`, 'e');
+    }
+  }
+  setProgress(1);
+  $('bathint').textContent = `批量完成：成功 ${ok} 条，失败 ${fail} 条（文件在浏览器「下载」文件夹）`;
+  log(`批量结束：成功 ${ok}，失败 ${fail}`, ok ? 's' : 'e');
+  setBusy(false); aborter = null;
+};
+
+/* ---------- 初始化 ---------- */
+buildVoiceSelects();
+/* ---------- 视图切换：控制台 / 音色库（二级页，同一个 html） ---------- */
+function setView(name){
+  const voice = name === 'voice';
+  $('viewVoice').hidden = !voice;
+  $('viewConsole').hidden = voice;
+  if($('sbTask')) $('sbTask').style.display = voice ? 'none' : '';
+  $('engconfirm').hidden = true;
+  window.scrollTo(0, 0);
+  if(voice){ loadVoices(); renderRefStatus(); log('进入本地音色库'); }
+}
+function routeView(){
+  const h = (location.hash || '').replace(/^#\/?/, '');
+  setView(h === 'voice' ? 'voice' : 'console');
+}
+['openVoice','openVoice2'].forEach(id=>{ const b = $(id); if(b) b.onclick = ()=>{ location.hash = '#/voice'; }; });
+$('backConsole').onclick = ()=>{ location.hash = '#/'; };
+window.addEventListener('hashchange', routeView);
+routeView();
+
+/* ---------- 右下角浮层：日志 / 生成历史（同一个位置，互斥） ---------- */
+$('logBtn').onclick = ()=>{
+  const p = $('logpanel'), h = $('histpanel');
+  if(h) h.hidden = true;
+  p.hidden = !p.hidden;
+  if(!p.hidden) $('log').scrollTop = $('log').scrollHeight;
+};
+$('logClose').onclick = ()=>{ $('logpanel').hidden = true; };
+$('histBtn').onclick = ()=>{
+  const p = $('histpanel'), l = $('logpanel');
+  l.hidden = true;
+  p.hidden = !p.hidden;
+};
+$('histClose').onclick = ()=>{ $('histpanel').hidden = true; };
+
+updateCount(); applyMode(); applyTask(); hostStatus(); renderRefStatus();
+checkHealth(); checkOfficial(); loadVoices(); loadModel(); loadHistory();
+setInterval(()=>{ checkHealth(); checkOfficial(); hostStatus(); }, 15000);
+log('控制台就绪 · 可在「引擎与模式」里切换完整 / 快速两套');
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+[Unit]
+Description=Ming-3.0-TTS SGLang service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /opt/sglang/ming_tts_service.sh
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+StandardOutput=append:/mnt/c/WSL/serve.log
+StandardError=append:/mnt/c/WSL/serve.log
+
+[Install]
+WantedBy=multi-user.target

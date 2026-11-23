@@ -1,0 +1,16 @@
+[Unit]
+Description=Ming TTS official full mode (8010)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ming-official
+Environment=PYTHONPATH=/opt/ming-official/libs
+ExecStart=/opt/sglang/.venv/bin/python /opt/ming-official/serve_official.py
+StandardOutput=append:/mnt/c/WSL/official_serve.log
+StandardError=append:/mnt/c/WSL/official_serve.log
+Restart=no
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target
