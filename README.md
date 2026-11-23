@@ -51,15 +51,15 @@ ming-service-host.py  ── 静态页面 + /start /stop /status ──► wsl.e
 ## 目录
 
 ```
+启动.cmd                  日常唯一入口：起管家（页面同端口）+ 自动开浏览器
+停止.cmd                  停两套引擎 + 结束管家进程（引擎显存一并释放）
 控制台/                   页面 + 管家 + 启动脚本
-  config.cmd              唯一的本地配置点（Python 路径、WSL 发行版）
+  config.cmd              唯一的本地配置点（Python 路径、WSL 发行版、端口、SGLang 目录）
   config.sh               Linux 配置点（Python、引擎目录、端口）
   ming-console.html       单文件控制台（内联 CSS/JS）
   ming-service-host.py    服务管家：静态页面 + 引擎启停 API
   wsl-guard.ps1           WSL 自检 / 重置 / keepalive（仅 Windows）
-  启动Ming控制台.cmd       日常入口：起管家 → 自动开页面
-  打开Ming控制台.cmd       备用入口：连 WSL 引擎一起冷启动
-  启动Ming-TTS.cmd / 停止Ming-TTS.cmd
+  启动Ming控制台.cmd       被根目录启动.cmd 调用，只起管家
   start.sh / stop.sh      Linux 入口：原生起停，不需要 WSL
 服务端/                   跑在 WSL 里的推理服务
   serve_official.py       FastAPI，8010，任务契约 / 分段 / 重试 / ASR 复核
@@ -98,10 +98,12 @@ cd ming-tts-console
    ```
    - `PYTHON_EXE`：你的 Windows Python 路径（`where python` 可查）
    - `MING_WSL_DISTRO`：`wsl -l -v` 里看到的发行版名，管家和 `wsl-guard.ps1` 都读这个值
+   - 同文件还有 `MING_HOST_PORT`（默认 `8766`）和 `MING_SGLANG_DIR`（默认 `/opt/sglang`），一般不用动
    > 直接用环境变量也行：先 `set MING_WSL_DISTRO=你的发行版` 再启动，脚本不会覆盖已设置的值。
 2. 把 `服务端/` 里的 `serve_official.py` 和 systemd unit 部署进 WSL（示例：`/opt/ming-official/`），模型目录、参考音频目录按官方结构放。
-3. 双击 `控制台/启动Ming控制台.cmd`，浏览器会打开 `http://127.0.0.1:8766/ming-console.html`。
+3. 双击**根目录的 `启动.cmd`**，浏览器会打开 `http://127.0.0.1:8766/ming-console.html`。
 4. 在页面上点「完整模式」→ 确认冷启动 → 等状态变「就绪」；之后选任务、选音色、贴稿、生成。
+5. 收工：双击**根目录的 `停止.cmd`**——停两套引擎并结束管家进程，显存和端口都释放；WSL 发行版会保留，下次启动更快。只想停引擎、继续用页面时，用页面上的停止按钮即可。
 
 ### Linux（原生，不需要 WSL）
 
@@ -175,6 +177,7 @@ bash scripts/check.sh    # Python/Shell 语法 + 个人路径扫描，CI 也跑�
 - 内置音色的性别 / 年龄是从标签文案推断的（`男性（男童）`、`老年` 这类字样），不是模型独立字段。
 - 启动脚本分两套：Windows 用 `.cmd` + PowerShell（含 WSL 自检），Linux 用 `start.sh` / `stop.sh`；macOS 未适配（无 CUDA）。
 - Linux 下引擎启停依赖 `systemctl`，服务未注册成 systemd unit 时需要手动跑 `start_ming.sh`。
+- `wsl.exe` 的 `-d` 参数**不能加引号**（写成 `-d "%VAR%"` 会把引号当成发行版名的一部分，报 `WSL_E_DISTRO_NOT_FOUND`），仓库里的脚本已按 `-d %VAR%` 写法规避。自己写脚本时注意这条。
 
 ## 许可
 

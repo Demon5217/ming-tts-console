@@ -10,5 +10,11 @@ if not defined PYTHON_EXE set "PYTHON_EXE=C:\Program Files\Python313\python.exe"
 rem  WSL distro name (as shown by: wsl -l -v)
 if not defined MING_WSL_DISTRO set "MING_WSL_DISTRO=Ubuntu-22.04"
 
+rem  Port for the host process + console page (keep in sync with the page)
+if not defined MING_HOST_PORT set "MING_HOST_PORT=8766"
+
+rem  SGLang dir inside WSL, used by the root-level stop script
+if not defined MING_SGLANG_DIR set "MING_SGLANG_DIR=/opt/sglang"
+
 rem  Legacy alias kept for older scripts
 set "WSL_DISTRO=%MING_WSL_DISTRO%"
