@@ -1,0 +1,51 @@
+name: 功能建议
+description: 想要某个能力、某个交互改进，或提出方案
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        先说清「你想解决什么」，比「你想加什么按钮」更容易落地。
+        如果改动会碰到 `/start` `/stop` `/status` 的接口契约、或新增任务类型，请先在这里讨论，别直接开 PR。
+
+  - type: textarea
+    id: pain
+    attributes:
+      label: 现在的痛点
+      description: 你在哪个操作上觉得别扭、慢、容易错
+      placeholder: |
+        切到 IP 任务选内置音色时，得记住角色名去搜索，233 条根本记不住。
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: 你期望的样子
+      description: 界面/行为上具体是什么样。有截图或草图更好（拖进来就行）
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: 大概动哪里
+      options:
+        - 只动页面（ming-console.html）
+        - 页面 + 管家（ming-service-host.py）
+        - 服务端推理（serve_official.py）
+        - 启动脚本 / 部署方式
+        - 文档
+        - 不确定
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: offer
+    attributes:
+      label: 你愿意自己提 PR 吗
+      options:
+        - label: 我愿意提 PR
+        - label: 我可以帮忙测试（Windows + WSL2）
+        - label: 我可以帮忙测试（Linux）

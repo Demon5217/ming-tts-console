@@ -1,0 +1,123 @@
+name: 问题反馈
+description: 跑不起来、生成效果不对、页面/脚本报错
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。这套控制台的大部分问题跟显卡、WSL、模型目录有关，**请尽量把下面几项填全**，否则很难定位。
+        提问前建议先看 [CONTRIBUTING.md](https://github.com/Demon5217/ming-tts-console/blob/main/CONTRIBUTING.md) 的「跑不起来」排查顺序。
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我跑过 `bash scripts/check.sh` 并且通过
+          required: true
+        - label: 我搜过现有 issue，没有重复
+          required: true
+        - label: 日志里没有 token / 内网地址 / 私人路径 / 语音素材
+          required: true
+
+  - type: dropdown
+    id: engine
+    attributes:
+      label: 用的是哪套引擎
+      options:
+        - 完整模式（官方推理，8010）
+        - 快速模式（SGLang，8000）
+        - 两套都有问题
+        - 还没到引擎这一步（页面/管家就挂了）
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 系统
+      options:
+        - Windows 11 + WSL2
+        - Linux 原生
+        - Windows（不用 WSL，直接跑 Linux 侧脚本）
+        - 其他（在下面说明）
+    validations:
+      required: true
+
+  - type: input
+    id: gpu
+    attributes:
+      label: 显卡与显存
+      description: 贴 `nvidia-smi` 里那行显存数字，例如 `6144MiB` / `24576MiB`
+      placeholder: RTX 3060 Laptop 6144MiB
+    validations:
+      required: true
+
+  - type: dropdown
+    id: task
+    attributes:
+      label: 任务类型
+      options:
+        - TTS（普通合成）
+        - BASIC（语速/音高/音量）
+        - EMOTION（情绪）
+        - DIALECT（方言）
+        - FREEFORM（自由指令）
+        - VOICE_DESIGN（音色设计）
+        - IP（内置音色）
+        - 跟任务无关（启停/页面问题）
+    validations:
+      required: true
+
+  - type: dropdown
+    id: voice_path
+    attributes:
+      label: 音色路径
+      description: 这一项决定了「像不像」和「开头稳不稳」，跟现象强相关
+      options:
+        - spk（纯净音色嵌入）
+        - prompt_emb（官方零样本克隆）
+        - prompt（仅参考音频提示）
+        - IP 内置音色，没传参考音频
+        - 不涉及音色
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 现象
+      description: 发生了什么、期望是什么。如果是效果问题，说清是「全是噪音」「开头丢字」「音色不像」还是「语速/情绪不对」
+      placeholder: |
+        点「快速模式」启动后状态一直卡在「启动中」，等了 10 分钟没变成「就绪」。
+        期望：要么起来，要么立刻报错告诉我还缺什么。
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      description: 从双击脚本/执行命令开始，写清每一步；涉及生成的请附上用的文本（不用附完整长文，贴开头几个字加字数即可）
+      placeholder: |
+        1. 双击 控制台/启动Ming控制台.cmd
+        2. 页面点「快速模式」→ 确认
+        3. 状态栏一直显示「启动中」
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: 页面右下角日志浮层的内容，或 `MING_LOG_DIR`（默认 `/var/log/ming-tts/`）里的 `serve.log` 末尾 50 行
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: `git log -1 --oneline` 的输出
+      placeholder: 16fa07c 开源准备：服务端路径改为环境变量…

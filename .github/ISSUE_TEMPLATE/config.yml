@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 上游安装/模型问题（Ming-3.0-TTS）
+    url: https://github.com/Alexwell-Chen/Ming-3.0-TTS
+    about: 模型权重、推理依赖、官方 generate() 用法等，请到上游仓库提问。本仓库只有界面与启动这一层。

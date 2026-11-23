@@ -68,6 +68,8 @@ ming-service-host.py  ── 静态页面 + /start /stop /status ──► wsl.e
   voice_data.js           内置音色清单（页面数据来源，来源见 THIRD-PARTY.md）
 scripts/check.sh          自检：语法 + 个人路径扫描（CI 同款）
 .github/workflows/check.yml  push 时跑自检
+.github/ISSUE_TEMPLATE/  问题反馈 / 功能建议模板
+CONTRIBUTING.md           提 issue 要带的信息、PR 约定、排查顺序
 THIRD-PARTY.md            第三方组件、模型与音色资源的许可说明
 ```
 
@@ -142,6 +144,10 @@ cd ming-tts-console
 ```bash
 bash scripts/check.sh    # Python/Shell 语法 + 个人路径扫描，CI 也跑同一套
 ```
+
+### 反馈与贡献
+
+提 issue 请用仓库里的模板，并带上模式、显卡显存、系统、任务类型、音色路径和日志——这几项缺一个都很难定位。完整要求和 PR 约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ### 端口
 
