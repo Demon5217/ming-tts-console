@@ -49,12 +49,14 @@ ming-service-host.py  ── 静态页面 + /start /stop /status ──► wsl.e
 ```
 控制台/                   页面 + 管家 + 启动脚本
   config.cmd              唯一的本地配置点（Python 路径、WSL 发行版）
+  config.sh               Linux 配置点（Python、引擎目录、端口）
   ming-console.html       单文件控制台（内联 CSS/JS）
   ming-service-host.py    服务管家：静态页面 + 引擎启停 API
-  wsl-guard.ps1           WSL 自检 / 重置 / keepalive
+  wsl-guard.ps1           WSL 自检 / 重置 / keepalive（仅 Windows）
   启动Ming控制台.cmd       日常入口：起管家 → 自动开页面
   打开Ming控制台.cmd       备用入口：连 WSL 引擎一起冷启动
   启动Ming-TTS.cmd / 停止Ming-TTS.cmd
+  start.sh / stop.sh      Linux 入口：原生起停，不需要 WSL
 服务端/                   跑在 WSL 里的推理服务
   serve_official.py       FastAPI，8010，任务契约 / 分段 / 重试 / ASR 复核
   ming-official.service   systemd unit
@@ -66,11 +68,12 @@ ming-service-host.py  ── 静态页面 + /start /stop /status ──► wsl.e
 
 ## 环境要求
 
-- Windows 11 + WSL2（任意发行版，默认按 `Ubuntu-22.04` 写，可改）
-- Python 3.10+ 的 Windows 解释器（用来跑管家；默认按 `C:\Program Files\Python313\python.exe` 写，可改）
+- Windows 11 + WSL2（任意发行版，默认按 `Ubuntu-22.04` 写，可改）；或 Linux 原生（不用 WSL）
+- Python 3.8+（用来跑管家；Windows 默认按 `C:\Program Files\Python313\python.exe` 写，Linux 默认 `python3`，都可改）
 - NVIDIA 驱动可用 `nvidia-smi`；6GB 显存起步（两套引擎不能同时常驻）
 - 已按 Ming-3.0-TTS 官方说明装好模型与依赖（**本仓库不含模型权重**）
 - ASR 可选：`funasr`/`sensevoice` 之类的本机服务跑在 `8011`，没有也能用，只是少了逐字稿自动转写和内容校验
+- **macOS 不在支持范围**：没有 CUDA，显存假设不成立，脚本也没做适配
 
 ## 快速开始
 
@@ -78,6 +81,8 @@ ming-service-host.py  ── 静态页面 + /start /stop /status ──► wsl.e
 git clone https://github.com/Demon5217/ming-tts-console.git
 cd ming-tts-console
 ```
+
+### Windows（WSL2）
 
 1. **只改一个文件**：打开 `控制台/config.cmd`，改这两项（其余脚本都会 `call` 它）：
    ```bat
@@ -91,9 +96,30 @@ cd ming-tts-console
 3. 双击 `控制台/启动Ming控制台.cmd`，浏览器会打开 `http://127.0.0.1:8766/ming-console.html`。
 4. 在页面上点「完整模式」→ 确认冷启动 → 等状态变「就绪」；之后选任务、选音色、贴稿、生成。
 
+### Linux（原生，不需要 WSL）
+
+1. 把 `服务端/` 里的 `serve_official.py`、systemd unit、`启动脚本/start_ming.sh` 部署到 `/opt/sglang`（或任意目录）。
+2. 改 `控制台/config.sh`：
+   ```bash
+   PYTHON_BIN=python3            # 跑管家的解释器
+   MING_SERVICE_ROOT=/opt/sglang # start_ming.sh 所在目录
+   MING_HOST_PORT=8766           # 管家 + 页面端口
+   ```
+3. 拉起：
+   ```bash
+   chmod +x 控制台/start.sh 控制台/stop.sh
+   控制台/start.sh             # 只起管家+页面，引擎在页面上点按钮
+   控制台/start.sh fast        # 顺便拉起快速模式（8000）
+   控制台/start.sh official    # 顺便拉起完整模式（8010）
+   控制台/stop.sh              # 停管家+页面；stop.sh --all 连引擎一起停
+   ```
+4. 浏览器打开 `http://127.0.0.1:8766/ming-console.html`（无桌面环境就用 SSH 端口转发）。
+
+> Linux 下没有 WSL 这一层，管家不会跑 `wsl-guard.ps1`；引擎启停走本地 `systemctl` / `bash start_ming.sh`，所以 `systemctl restart ming-official` 需要相应权限（通常用 sudo 或给服务配好权限）。
+
 ### 端口
 
-`8766`（管家 + 页面）、`8010`（完整模式）、`8000`（快速模式）、`8011`（可选 ASR）。改端口要同时改 `ming-service-host.py` 顶部的 `PORT` 和页面里的接口地址。
+`8766`（管家 + 页面，可用 `MING_HOST_PORT` 改）、`8010`（完整模式）、`8000`（快速模式）、`8011`（可选 ASR）。改 8766 之外还要同步页面里的接口地址。
 
 ## 管家 API
 
@@ -113,7 +139,8 @@ cd ming-tts-console
 - `fp16` 在这套权重上跑不通（bf16/Half dtype 冲突），只能用默认精度。
 - `flow_steps` 外部不可调（官方 `generate()` 不接该参数）；`cfg` 降档反而更慢（实测 1.0→15.6s、1.5→12.2s、2.0→10.7s）。
 - 内置音色的性别 / 年龄是从标签文案推断的（`男性（男童）`、`老年` 这类字样），不是模型独立字段。
-- 启动脚本是 Windows 批处理 + PowerShell；Linux/macOS 需自行改写入口。
+- 启动脚本分两套：Windows 用 `.cmd` + PowerShell（含 WSL 自检），Linux 用 `start.sh` / `stop.sh`；macOS 未适配（无 CUDA）。
+- Linux 下引擎启停依赖 `systemctl`，服务未注册成 systemd unit 时需要手动跑 `start_ming.sh`。
 
 ## 许可
 

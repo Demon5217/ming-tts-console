@@ -2376,7 +2376,7 @@ async function hostStatus(){
     const j = await r.json();
     hostOk = true;
     const v = j.vram || {};
-    const txt = `管家正常 · 完整模式 ${j.official ? '运行中' : '未启动'} · 快速模式 ${j.fast ? '运行中' : '未启动'} · 显存 ${v.used >= 0 ? v.used + 'MB' : '未知'} · C盘可用 ${j.c_free_gb}GB`;
+    const txt = `管家正常 · 完整模式 ${j.official ? '运行中' : '未启动'} · 快速模式 ${j.fast ? '运行中' : '未启动'} · 显存 ${v.used >= 0 ? v.used + 'MB' : '未知'} · 磁盘可用 ${j.c_free_gb}GB`;
     $('svchint').textContent = txt;
     $('svchint').title = txt;
   }catch(e){

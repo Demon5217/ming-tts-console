@@ -12,6 +12,10 @@
 # 本地开发笔记（含本机路径与调试过程，不发布）
 文档/
 
+# Linux 入口的运行时文件
+.ming-host.pid
+.ming-host.log
+
 # 本地备份
 *.bak
 *.bak-*

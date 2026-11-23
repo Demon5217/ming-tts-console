@@ -29,10 +29,14 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 PAGE = "ming-console.html"
 GUARD = os.path.join(BASE, "wsl-guard.ps1")
 
-PORT = 8766
+PORT = int(os.environ.get("MING_HOST_PORT") or 8766)
+IS_WIN = sys.platform == "win32"
+# 引擎脚本所在目录（服务端部署位置），可用环境变量 MING_SERVICE_ROOT 覆盖
+SERVICE_ROOT = os.environ.get("MING_SERVICE_ROOT") or "/opt/sglang"
 # 发行版名可配置：启动脚本 config.cmd 里设置 MING_WSL_DISTRO，未设置时用默认值
 DISTRO = os.environ.get("MING_WSL_DISTRO") or "Ubuntu-22.04"
-WSL = ["wsl.exe", "-d", DISTRO, "-e", "bash", "-lc"]
+# Windows 走 WSL 执行 shell；Linux 直接本地 bash
+WSL = ["wsl.exe", "-d", DISTRO, "-e", "bash", "-lc"] if IS_WIN else ["bash", "-lc"]
 
 _lock = threading.Lock()
 _log = []
@@ -88,18 +92,24 @@ def vram_used():
 
 
 def free_c_gb():
+    """模型/缓存所在盘的剩余空间（Windows 看 C 盘，Linux 看根目录）。"""
     try:
         import shutil
-        return round(shutil.disk_usage("C:\\").free / 1073741824.0, 1)
+        target = "C:\\" if IS_WIN else "/"
+        return round(shutil.disk_usage(target).free / 1073741824.0, 1)
     except Exception:
         return -1
 
 
 def wsl_guard():
-    """启动引擎前先自检 WSL：卡死就 wsl --shutdown 重置并拉起 keepalive。
+    """Windows 启动引擎前先自检 WSL：卡死就 wsl --shutdown 重置并拉起 keepalive。
 
     逻辑与 wsl-guard.ps1 一致，直接复用那个脚本，避免两处维护。
+    Linux 上引擎是本机进程，没有 WSL 这一层，直接跳过。
     """
+    if not IS_WIN:
+        say("Linux：跳过 WSL 自检")
+        return
     if not os.path.exists(GUARD):
         say("跳过 WSL 自检（找不到 wsl-guard.ps1）")
         return
@@ -156,7 +166,7 @@ def start_engine(name):
         say("启动 8000 …")
         # 快速模式冷启动 10~15 分钟（含 CUDA graph），脚本自身会等 15 分钟，
         # 所以这里的超时必须比脚本长，否则会误报 TIMEOUT
-        out = sh("bash /opt/sglang/start_ming.sh", timeout=960)
+        out = sh("bash %s/start_ming.sh" % SERVICE_ROOT, timeout=960)
         if out:
             say(out.strip()[-300:])
         ok = wait_health("http://127.0.0.1:8000/health", 1500)
