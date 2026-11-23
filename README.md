@@ -32,7 +32,7 @@
 - **质量控制**：失败自动换种子重试、时长/音量异常检测、ASR 念字复核（防「全是噪音」）、长文按 24 字分段并复用首段音色。
 - **音色库**：参考音频 + 逐字稿存在浏览器 IndexedDB，可保存、试听、删除；自动转写走本机 ASR（`8011`）。
 - **ASR 随管家启停**：管家起来就在后台拉起 `ming-asr`（`faster-whisper small`，跑 CPU 不占显存），管家退出时一起停；页脚有状态灯，没注册该服务时显示「ASR 未就绪」但不影响 TTS。起不来时管家日志会带出 `journalctl -u ming-asr` 末几行的具体原因，状态灯和文案 hover 也能看到。
-- **ASR 掉线自动补拉**：WSL 在没有活跃会话时会把 distro 里的进程一起清掉（systemd 服务也跟着没），所以管家每 60 秒用 socket 探一次 `8011`，发现不在就重新拉起（`MING_ASR_WATCH=0` 可关，`MING_ASR_WATCH_SEC` 可调间隔）。
+- **ASR 掉线自动补拉**：WSL 在最后一个 `wsl.exe` 会话结束后十几秒，就会把 distro 里的进程（含 systemd 服务）一起清掉，所以只靠启动时拉一次不够。管家每 10 秒跑一次极轻的 `wsl true` 续命，并每分钟探一次 `8011`，掉了就立即补拉（`MING_ASR_WATCH=0` 可关，`MING_ASR_KEEPALIVE_SEC` / `MING_ASR_WATCH_SEC` 可调间隔）。代价是管家在运行期间 WSL 不会进入空闲休眠。
 - **内置音色**：233 条内置角色按「角色 → 情绪」聚合成 85 个，用性别 / 年龄 / 语言 / 情绪标签筛选，不用记关键词。
 - **其他**：批量长文（一行一个文件）、A/B 对比、请求体查看、生成历史、日志浮层、`Ctrl+Enter` 生成 / `Esc` 停止。
 
@@ -101,7 +101,7 @@ cd ming-tts-console
    - `PYTHON_EXE`：你的 Windows Python 路径（`where python` 可查）
    - `MING_WSL_DISTRO`：`wsl -l -v` 里看到的发行版名，管家和 `wsl-guard.ps1` 都读这个值
    - 同文件还有 `MING_HOST_PORT`（默认 `8766`）和 `MING_SGLANG_DIR`（默认 `/opt/sglang`），一般不用动
-   - `MING_ASR_WATCH`（默认开）：部署了 `ming-asr` 后，管家每 `MING_ASR_WATCH_SEC`（默认 60）秒探一次 `8011`，掉了就补拉一次；想临时关掉 ASR 就用 `set MING_ASR_WATCH=0` 再启动
+   - `MING_ASR_WATCH`（默认开）：部署了 `ming-asr` 后，管家每 `MING_ASR_KEEPALIVE_SEC`（默认 10）秒跑一次 `wsl true` 给 distro 续命，并每 `MING_ASR_WATCH_SEC`（默认 60）秒探一次 `8011`，掉了就补拉；想临时关掉 ASR 就用 `set MING_ASR_WATCH=0` 再启动
    > 直接用环境变量也行：先 `set MING_WSL_DISTRO=你的发行版` 再启动，脚本不会覆盖已设置的值。
 2. 把 `服务端/` 里的 `serve_official.py` 和 systemd unit 部署进 WSL（示例：`/opt/ming-official/`），模型目录、参考音频目录按官方结构放。
 3. 双击**根目录的 `启动.cmd`**，浏览器会打开 `http://127.0.0.1:8766/ming-console.html`。

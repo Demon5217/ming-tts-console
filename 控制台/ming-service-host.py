@@ -48,8 +48,12 @@ ASR_PORT = int(os.environ.get("MING_ASR_PORT") or 8011)
 _asr_error = ""
 # 巡检间隔（秒）；WSL 空闲会把 distro 里的服务清掉，所以要定期补拉
 ASR_WATCH_SEC = int(os.environ.get("MING_ASR_WATCH_SEC") or 60)
+# 心跳间隔（秒）：WSL 在最后一个会话结束后十几秒就清进程，所以心跳要压到 10 秒以内
+ASR_KEEPALIVE_SEC = int(os.environ.get("MING_ASR_KEEPALIVE_SEC") or 10)
 # 管家退出中：巡检线程看到它就不再拉起 ASR，避免和 atexit 的 stop 打架
 _shutting_down = False
+# 拉起 ASR 的互斥锁：启动线程与巡检线程别同时 systemctl start
+_asr_start_lock = threading.Lock()
 # 发行版名可配置：启动脚本 config.cmd 里设置 MING_WSL_DISTRO，未设置时用默认值
 DISTRO = os.environ.get("MING_WSL_DISTRO") or "Ubuntu-22.04"
 # Windows 走 WSL 执行 shell；Linux 直接本地 bash
@@ -224,33 +228,40 @@ def start_asr():
     """管家起来时顺带拉起 ASR；起不来只记日志，绝不影响引擎与页面。
 
     放在后台线程里做（模型暖机要十几秒），避免拖慢页面打开。
+    启动与巡检线程共用一把锁，避免两边同时 systemctl start 打出重复日志。
     """
     global _asr_error
-    if asr_active():
-        _asr_error = ""
-        say("ASR 已在运行（%d）" % ASR_PORT)
-        return True
-    if not has_systemctl() or not systemd_running():
-        _asr_error = "systemd 不可用"
-        say("跳过 ASR：systemd 不可用（容器里需要手动起 %d，不影响 TTS）" % ASR_PORT)
-        return False
-    if not has_asr_unit():
-        _asr_error = "没有注册 %s 服务" % ASR_UNIT
-        say("跳过 ASR：没有注册 %s 服务（可选组件，不影响 TTS 生成）" % ASR_UNIT)
-        return False
-    say("启动 ASR（%d）…" % ASR_PORT)
-    sh("systemctl start %s 2>&1 || true" % ASR_UNIT, timeout=120)
-    t0 = time.time()
-    while time.time() - t0 < 120:
+    if not _asr_start_lock.acquire(blocking=False):
+        # 另一处正在拉，等它的结果就行
+        return asr_active()
+    try:
         if asr_active():
             _asr_error = ""
-            say("ASR 就绪（%d），转写与内容校验可用" % ASR_PORT)
+            say("ASR 已在运行（%d）" % ASR_PORT)
             return True
-        time.sleep(2)
-    _asr_error = asr_last_error()
-    say("ASR 未就绪（%d）：%s（不影响 TTS 生成；排查：journalctl -u %s）"
-        % (ASR_PORT, _asr_error, ASR_UNIT))
-    return False
+        if not has_systemctl() or not systemd_running():
+            _asr_error = "systemd 不可用"
+            say("跳过 ASR：systemd 不可用（容器里需要手动起 %d，不影响 TTS）" % ASR_PORT)
+            return False
+        if not has_asr_unit():
+            _asr_error = "没有注册 %s 服务" % ASR_UNIT
+            say("跳过 ASR：没有注册 %s 服务（可选组件，不影响 TTS 生成）" % ASR_UNIT)
+            return False
+        say("启动 ASR（%d）…" % ASR_PORT)
+        sh("systemctl start %s 2>&1 || true" % ASR_UNIT, timeout=120)
+        t0 = time.time()
+        while time.time() - t0 < 120:
+            if asr_active():
+                _asr_error = ""
+                say("ASR 就绪（%d），转写与内容校验可用" % ASR_PORT)
+                return True
+            time.sleep(2)
+        _asr_error = asr_last_error()
+        say("ASR 未就绪（%d）：%s（不影响 TTS 生成；排查：journalctl -u %s）"
+            % (ASR_PORT, _asr_error, ASR_UNIT))
+        return False
+    finally:
+        _asr_start_lock.release()
 
 
 def stop_asr():
@@ -261,13 +272,14 @@ def stop_asr():
 
 
 def asr_watch():
-    """后台巡检：ASR 掉了就重新拉起。
+    """后台线程：给 WSL 续命 + ASR 掉了就补拉。
 
-    为什么需要这一段：WSL 在没有活跃会话时会把 distro 里的进程（含 systemd 服务）
-    一起清掉，下个会话进来才重新起 init。只靠管家启动时拉一次，空闲一会儿 ASR 就没了，
-    页面上灯变红、生成后的 ASR 复核和音色库自动转写都会失效。
+    为什么需要这一段：WSL 在最后一个 `wsl.exe` 会话结束后十几秒，就会把 distro 里的进程
+    （含 systemd 管理的服务）一起清掉，等下次有会话再重新起 init。实测「空闲 15 秒左右就没了」，
+    所以只靠启动时拉一次、或者几十秒才巡检一次，都追不上——每次拉起后十几秒又被清。
 
-    这里先用纯 socket 探端口（不碰 WSL、不唤醒 VM），只有真掉了才去唤醒并拉起。
+    做法：每 ASR_KEEPALIVE_SEC（默认 10 秒）跑一次极轻的 `true`，让 distro 一直有活跃会话；
+    每 6 次心跳（约 1 分钟）用 socket 探一次 8011，真掉了才拉起。Linux 下没有这个问题，只做巡检。
     """
     global _asr_error
     if (os.environ.get("MING_ASR_WATCH") or "").strip().lower() in ("0", "off", "no", "false"):
@@ -279,27 +291,29 @@ def asr_watch():
             return
     except Exception:
         return
+    tick = 0
     fails = 0
     while not _shutting_down:
-        # 连续失败时把间隔拉长，别每分钟都去戳一次 WSL
-        time.sleep(ASR_WATCH_SEC * (4 if fails >= 3 else 1))
-        if _shutting_down:
-            return
         try:
-            if asr_active():
-                fails = 0
-                continue
-            if fails >= 3:
-                fails = 0
-                continue
-            say("巡检发现 ASR 不在（%d），重新拉起…" % ASR_PORT)
-            if start_asr():
-                fails = 0
-            else:
-                fails += 1
+            # 心跳：仅 Windows/WSL 需要，Linux 的 systemd 不依赖客户端会话
+            if IS_WIN:
+                sh("true", timeout=30)
+            tick += 1
+            # 只在周期点检查，避免和启动线程在刚起来时撞车
+            if tick % 6 == 0 and not asr_active():
+                if fails >= 3:
+                    fails = 0
+                    time.sleep(ASR_WATCH_SEC * 4)
+                    continue
+                say("巡检发现 ASR 不在（%d），重新拉起…" % ASR_PORT)
+                if start_asr():
+                    fails = 0
+                else:
+                    fails += 1
         except Exception as e:
             fails += 1
             say("ASR 巡检异常：%s" % e)
+        time.sleep(ASR_KEEPALIVE_SEC)
 
 
 def stop_engine(name):
