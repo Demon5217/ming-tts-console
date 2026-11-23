@@ -15,6 +15,7 @@
 
 import json
 import os
+import shlex
 import socket
 import subprocess
 import sys
@@ -130,6 +131,24 @@ def wsl_guard():
         say("WSL 自检异常：%s" % e)
 
 
+def sh_ok(cmd):
+    """在目标 shell 里跑一条判断命令，输出含 yes 视为成立。"""
+    return "yes" in (sh(cmd, timeout=30) or "")
+
+
+def has_start_script():
+    return sh_ok("test -f %s && echo yes || echo no" % shlex.quote(os.path.join(SERVICE_ROOT, "start_ming.sh")))
+
+
+def has_systemctl():
+    return sh_ok("command -v systemctl >/dev/null 2>&1 && echo yes || echo no")
+
+
+def has_official_unit():
+    """systemctl 在、但 unit 没注册时，restart 只会静默失败，必须提前拦住。"""
+    return sh_ok("systemctl cat ming-official >/dev/null 2>&1 && echo yes || echo no")
+
+
 def stop_engine(name):
     if name in ("official", "all"):
         sh("systemctl stop ming-official 2>/dev/null || true")
@@ -141,26 +160,44 @@ def stop_engine(name):
 
 
 def start_engine(name):
-    """启动指定引擎；显存互斥，先停另一套。"""
+    """启动指定引擎；显存互斥，先停另一套。
+
+    启动前先做“能不能启”的检查：缺脚本、缺 systemctl 就直接报错返回，
+    否则会白等 wait_health 十几分钟，页面上看起来像卡死。
+    """
     if name not in ("official", "fast"):
         return {"ok": False, "error": "未知引擎 %r" % name}
+
+    # 先检查前置条件，再动另一套引擎（避免检查失败却已经把在跑的引擎停了）
+    if name == "official" and not has_systemctl():
+        return {"ok": False, "error": "找不到 systemctl：完整模式依赖 systemd 服务，"
+                                       "请先注册 ming-official.service 或手动启动 8010"}
+    if name == "official" and not has_official_unit():
+        return {"ok": False, "error": "systemctl 里没有 ming-official 这个服务："
+                                       "请把 服务端/ming-official.service 部署到 /etc/systemd/system/ "
+                                       "并 systemctl daemon-reload"}
+    if name == "fast" and not has_start_script():
+        return {"ok": False, "error": "找不到 %s/start_ming.sh：请把服务端脚本部署到该目录，"
+                                       "或在 config.cmd / config.sh 里改 MING_SERVICE_ROOT"
+                                       % SERVICE_ROOT}
+
     wsl_guard()
     if name == "official":
         c_free = free_c_gb()
-        say("C 盘可用 %.1fGB" % c_free)
+        say("磁盘可用 %.1fGB" % c_free)
         if 0 < c_free < 2:
-            return {"ok": False, "error": "C 盘可用空间低于 2GB，已中止（按你的规则保护磁盘）"}
+            return {"ok": False, "error": "磁盘可用空间低于 2GB，已中止（保护磁盘）"}
         stop_engine("fast")
         say("启动 8010（systemd: ming-official）…")
         sh("systemctl restart ming-official 2>&1 || true")
         # 刚停完 8000 时，8010 要 4~5 分钟才能就绪（显存回收慢），240s 会误报失败
         ok = wait_health("http://127.0.0.1:8010/health", 600)
-        say("8010 %s" % ("就绪" if ok else "未就绪（冷启动最长约 5 分钟，看 /mnt/c/WSL/official_serve.log）"))
+        say("8010 %s" % ("就绪" if ok else "未就绪（冷启动最长约 5 分钟，看 serve 日志）"))
         return {"ok": ok, "engine": "official"}
 
     if name == "fast":
         c_free = free_c_gb()
-        say("C 盘可用 %.1fGB" % c_free)
+        say("磁盘可用 %.1fGB" % c_free)
         stop_engine("official")
         time.sleep(2)
         say("启动 8000 …")
@@ -170,7 +207,7 @@ def start_engine(name):
         if out:
             say(out.strip()[-300:])
         ok = wait_health("http://127.0.0.1:8000/health", 1500)
-        say("8000 %s" % ("就绪" if ok else "未就绪（冷启动最长约 15 分钟，看 /mnt/c/WSL/serve.log）"))
+        say("8000 %s" % ("就绪" if ok else "未就绪（冷启动最长约 15 分钟，看 serve 日志）"))
         return {"ok": ok, "engine": "fast"}
 
     return {"ok": False, "error": "未知引擎 %r" % name}
