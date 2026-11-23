@@ -2383,9 +2383,13 @@ async function hostStatus(){
     // ASR 跟着管家走：管家在 = ASR 应该可用；没亮说明服务没注册或没起来
     if($('asrDot')){
       $('asrDot').className = 'dot ' + (j.asr ? 'ok' : 'err');
-      $('asrDot').title = j.asr ? 'ASR 8011 可用：转写与内容校验生效' : 'ASR 未就绪：转写会失败，内容校验会被跳过';
+      $('asrDot').title = j.asr ? 'ASR 8011 可用：转写与内容校验生效'
+        : ('ASR 未就绪：转写会失败，内容校验会被跳过' + (j.asr_error ? ('\n原因：' + j.asr_error) : ''));
     }
-    if($('asrState')) $('asrState').textContent = j.asr ? 'ASR 就绪' : 'ASR 未就绪';
+    if($('asrState')){
+      $('asrState').textContent = j.asr ? 'ASR 就绪' : 'ASR 未就绪';
+      $('asrState').title = j.asr ? 'ASR 8011 可用' : (j.asr_error || 'ASR 未就绪');
+    }
   }catch(e){
     hostOk = false;
     const txt = '服务管家没起来：双击「启动Ming控制台.cmd」，浏览器会自动打开本页；之后启停都在这里点。';

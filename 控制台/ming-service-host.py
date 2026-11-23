@@ -20,6 +20,7 @@ small（device=cpu, int8），只吃内存不吃显存，所以和两套引擎�
 import atexit
 import json
 import os
+import re
 import shlex
 import signal
 import socket
@@ -43,6 +44,8 @@ SERVICE_ROOT = os.environ.get("MING_SERVICE_ROOT") or "/opt/sglang"
 # 可选 ASR 服务（faster-whisper small，跑 CPU），生命周期跟着管家进程
 ASR_UNIT = "ming-asr"
 ASR_PORT = int(os.environ.get("MING_ASR_PORT") or 8011)
+# 最近一次 ASR 启动失败的原因（给页面 hover 与 /status 用；成功即清空）
+_asr_error = ""
 # 发行版名可配置：启动脚本 config.cmd 里设置 MING_WSL_DISTRO，未设置时用默认值
 DISTRO = os.environ.get("MING_WSL_DISTRO") or "Ubuntu-22.04"
 # Windows 走 WSL 执行 shell；Linux 直接本地 bash
@@ -176,18 +179,59 @@ def asr_active():
     return port_alive(ASR_PORT)
 
 
+def asr_last_error(lines=6, limit=300):
+    """失败时抓 journal 末几行，去掉时间戳/进程前缀，压成一行给页面展示。
+
+    只读 journal，不触发联网，也不影响 TTS。
+    先滤掉 systemd 的 Started/Stopped 之类运营噪音，留下真正能定位问题的行。
+    """
+    out = sh("journalctl -u %s -n %d --no-pager 2>/dev/null | tail -n %d"
+             % (ASR_UNIT, lines * 4, lines * 2), timeout=30) or ""
+    rows = []
+    for raw in out.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        # "Nov 24 00:02:21 Demon python[315]: xxx" -> "xxx"
+        if "]: " in line:
+            line = line.split("]: ", 1)[1]
+        else:
+            line = re.sub(r"^\w{3}\s+\d+\s+\d\d:\d\d:\d\d\s+\S+\s+", "", line)
+        if re.match(r"^(Started|Stopped|Stopping|Deactivated|Scheduled restart|"
+                    r"Consumed|Ming ASR daemon)\b", line):
+            continue
+        rows.append(line)
+    if not rows:
+        return "journal 里没有输出（服务可能没起来）"
+    text = " | ".join(rows[-lines:])
+    if len(text) > limit:
+        # 从尾部按分隔符倒推，避免把开头一条切一半
+        chunks = text.split(" | ")
+        out_parts = []
+        for chunk in reversed(chunks):
+            if out_parts and len(" | ".join([chunk] + out_parts)) > limit:
+                break
+            out_parts.insert(0, chunk)
+        text = ("…" if len(out_parts) < len(chunks) else "") + " | ".join(out_parts)
+    return text[-limit:] if len(text) > limit else text
+
+
 def start_asr():
     """管家起来时顺带拉起 ASR；起不来只记日志，绝不影响引擎与页面。
 
     放在后台线程里做（模型暖机要十几秒），避免拖慢页面打开。
     """
+    global _asr_error
     if asr_active():
+        _asr_error = ""
         say("ASR 已在运行（%d）" % ASR_PORT)
         return True
     if not has_systemctl() or not systemd_running():
+        _asr_error = "systemd 不可用"
         say("跳过 ASR：systemd 不可用（容器里需要手动起 %d，不影响 TTS）" % ASR_PORT)
         return False
     if not has_asr_unit():
+        _asr_error = "没有注册 %s 服务" % ASR_UNIT
         say("跳过 ASR：没有注册 %s 服务（可选组件，不影响 TTS 生成）" % ASR_UNIT)
         return False
     say("启动 ASR（%d）…" % ASR_PORT)
@@ -195,10 +239,13 @@ def start_asr():
     t0 = time.time()
     while time.time() - t0 < 120:
         if asr_active():
+            _asr_error = ""
             say("ASR 就绪（%d），转写与内容校验可用" % ASR_PORT)
             return True
         time.sleep(2)
-    say("ASR 未就绪：看 journalctl -u %s（不影响 TTS 生成）" % ASR_UNIT)
+    _asr_error = asr_last_error()
+    say("ASR 未就绪（%d）：%s（不影响 TTS 生成；排查：journalctl -u %s）"
+        % (ASR_PORT, _asr_error, ASR_UNIT))
     return False
 
 
@@ -282,6 +329,7 @@ def status():
         "official": port_alive(8010),
         "fast": port_alive(8000),
         "asr": asr_active(),
+        "asr_error": _asr_error,
         "vram": vram_used(),
         "c_free_gb": free_c_gb(),
         "log": _log[-12:],

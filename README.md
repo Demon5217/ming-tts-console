@@ -31,7 +31,7 @@
 - **任务能力收敛**：切任务后只显示该任务真正生效的参数，无关项直接从界面消失，请求体也只发有效字段。
 - **质量控制**：失败自动换种子重试、时长/音量异常检测、ASR 念字复核（防「全是噪音」）、长文按 24 字分段并复用首段音色。
 - **音色库**：参考音频 + 逐字稿存在浏览器 IndexedDB，可保存、试听、删除；自动转写走本机 ASR（`8011`）。
-- **ASR 随管家启停**：管家起来就在后台拉起 `ming-asr`（`faster-whisper small`，跑 CPU 不占显存），管家退出时一起停；页脚有状态灯，没注册该服务时显示「ASR 未就绪」但不影响 TTS。
+- **ASR 随管家启停**：管家起来就在后台拉起 `ming-asr`（`faster-whisper small`，跑 CPU 不占显存），管家退出时一起停；页脚有状态灯，没注册该服务时显示「ASR 未就绪」但不影响 TTS。起不来时管家日志会带出 `journalctl -u ming-asr` 末几行的具体原因，状态灯和文案 hover 也能看到。
 - **内置音色**：233 条内置角色按「角色 → 情绪」聚合成 85 个，用性别 / 年龄 / 语言 / 情绪标签筛选，不用记关键词。
 - **其他**：批量长文（一行一个文件）、A/B 对比、请求体查看、生成历史、日志浮层、`Ctrl+Enter` 生成 / `Esc` 停止。
 
@@ -161,7 +161,7 @@ bash scripts/check.sh    # Python/Shell 语法 + 个人路径扫描，CI 也跑�
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/`、`/ming-console.html` | 控制台页面（同目录，`no-store`） |
-| GET | `/status` | `{official, fast, asr, vram:{used,free}, c_free_gb, log}` |
+| GET | `/status` | `{official, fast, asr, asr_error, vram:{used,free}, c_free_gb, log}` |
 | GET | `/health` | 管家自身健康检查 |
 | POST | `/start?engine=official\|fast` | 先 WSL 自检，再启引擎并轮询 `/health`（完整模式最长 10 分钟、快速模式最长 25 分钟） |
 | POST | `/stop?engine=official\|fast\|all` | 停引擎 |
