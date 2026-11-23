@@ -55,8 +55,38 @@ if [ -n "$ENGINE" ]; then
     *) echo "[ERROR] 引擎只能是 official 或 fast"; exit 1 ;;
   esac
   echo "[3/3] 请求启动引擎 $ENGINE（首次冷启动可能很久，进度看 $LOG）…"
-  curl -fsS -X POST "http://127.0.0.1:${MING_HOST_PORT}/start?engine=${ENGINE}" || \
-    echo "[WARN] 启动请求失败，可稍后在页面上重试"
+  # 用 Python 发请求，避免依赖 curl；没有超时，冷启动要等多久就等多久
+  if ! "$PYTHON_BIN" - "$MING_HOST_PORT" "$ENGINE" <<'PY'
+import json
+import sys
+import urllib.parse
+import urllib.request
+
+port, engine = sys.argv[1], sys.argv[2]
+url = "http://127.0.0.1:%s/start?engine=%s" % (port, urllib.parse.quote(engine))
+req = urllib.request.Request(url, method="POST")
+try:
+    with urllib.request.urlopen(req) as r:
+        body = r.read().decode("utf-8", "replace")
+except Exception as e:
+    print("[WARN] 启动请求失败：%s" % e)
+    sys.exit(1)
+
+try:
+    data = json.loads(body)
+except ValueError:
+    print(body)
+    sys.exit(0)
+
+if data.get("ok"):
+    print("引擎 %s 已就绪" % data.get("engine", engine))
+else:
+    print("[WARN] %s" % data.get("error", body))
+    sys.exit(1)
+PY
+  then
+    echo "启动未成功，可稍后在页面上重试"
+  fi
 else
   echo "[3/3] 跳过引擎启动（可在页面上点按钮）"
 fi

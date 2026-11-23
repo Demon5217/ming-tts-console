@@ -16,6 +16,25 @@ cd "$HERE"
 
 PIDFILE="$HERE/.ming-host.pid"
 
+# 按端口找监听进程并杀掉：fuser 优先，退到 lsof，再退到 ss（容器里常见没有前两个）
+kill_by_port() {
+  local port="$1" pids=""
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -k "${port}/tcp" 2>/dev/null && return 0
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    pids="$(lsof -t -iTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true)"
+    [ -n "$pids" ] && kill $pids 2>/dev/null && return 0
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    pids="$(ss -ltnp 2>/dev/null | awk -v p=":${port}" '$4 ~ p' \
+            | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u)"
+    [ -n "$pids" ] && kill $pids 2>/dev/null && return 0
+  fi
+  return 1
+}
+
+STOPPED=0
 if [ -f "$PIDFILE" ]; then
   PID="$(cat "$PIDFILE")"
   if kill -0 "$PID" 2>/dev/null; then
@@ -23,16 +42,19 @@ if [ -f "$PIDFILE" ]; then
     kill "$PID" 2>/dev/null || true
     for _ in $(seq 1 10); do kill -0 "$PID" 2>/dev/null || break; sleep 0.3; done
     kill -9 "$PID" 2>/dev/null || true
+    STOPPED=1
   else
-    echo "管家未在运行（pid 文件残留），清理中"
+    echo "pid 文件已过期（进程 $PID 不在），按端口 ${MING_HOST_PORT} 兜底清理"
   fi
-  rm -f "$PIDFILE"
 else
-  echo "没有 pid 文件，尝试按端口 ${MING_HOST_PORT} 兜底清理"
-  if command -v fuser >/dev/null 2>&1; then
-    fuser -k "${MING_HOST_PORT}/tcp" 2>/dev/null || true
-  fi
+  echo "没有 pid 文件，按端口 ${MING_HOST_PORT} 兜底清理"
 fi
+
+if [ "$STOPPED" -eq 0 ]; then
+  kill_by_port "$MING_HOST_PORT" && echo "已按端口停掉管家" || echo "端口 ${MING_HOST_PORT} 上没有监听进程"
+fi
+
+rm -f "$PIDFILE"
 
 if [ "${1:-}" = "--all" ]; then
   echo "停止引擎 …"

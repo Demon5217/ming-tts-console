@@ -131,7 +131,9 @@ cd ming-tts-console
 | POST | `/start?engine=official\|fast` | 先 WSL 自检，再启引擎并轮询 `/health`（完整模式最长 10 分钟、快速模式最长 25 分钟） |
 | POST | `/stop?engine=official\|fast\|all` | 停引擎 |
 
-`官方 /start` 前会检查磁盘余量（低于 2GB 直接中止）；两个引擎启动前都会先检查前置条件——快速模式要求 `MING_SERVICE_ROOT/start_ming.sh` 存在，完整模式要求 `systemctl cat ming-official` 能查到 unit——缺失时立即返回错误，不会白等到超时。
+`官方 /start` 前会检查磁盘余量（低于 2GB 直接中止）；两个引擎启动前都会先检查前置条件——快速模式要求 `MING_SERVICE_ROOT/start_ming.sh` 存在，完整模式要求 `systemctl` 可用、systemd 真在运行（容器里通常是 `offline`）、且 `systemctl cat ming-official` 能查到 unit——任一不满足立即返回错误，不会白等到超时。
+
+`stop.sh` 按 `.ming-host.pid` 停；pid 不存在（手工启动）或已过期时会退化为按端口找监听进程（`fuser` → `lsof` → `ss`），避免留下孤儿进程。
 
 ## 已知限制
 

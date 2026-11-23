@@ -149,6 +149,16 @@ def has_official_unit():
     return sh_ok("systemctl cat ming-official >/dev/null 2>&1 && echo yes || echo no")
 
 
+def systemd_running():
+    """容器里 systemctl 命令在，但 systemd 不是 PID 1，重启服务只会得到 offline。
+
+    只有 running / degraded / starting 才算真的能用。
+    """
+    out = (sh("systemctl is-system-running 2>&1 || true", timeout=30) or "").strip()
+    first = out.split()[0].lower() if out.split() else ""
+    return first in ("running", "degraded", "starting")
+
+
 def stop_engine(name):
     if name in ("official", "all"):
         sh("systemctl stop ming-official 2>/dev/null || true")
@@ -172,6 +182,10 @@ def start_engine(name):
     if name == "official" and not has_systemctl():
         return {"ok": False, "error": "找不到 systemctl：完整模式依赖 systemd 服务，"
                                        "请先注册 ming-official.service 或手动启动 8010"}
+    if name == "official" and not systemd_running():
+        return {"ok": False, "error": "systemd 没有在运行（常见于容器/沙箱）："
+                                       "完整模式依赖 systemd，容器里请直接手动起 8010，"
+                                       "或在宿主机上跑"}
     if name == "official" and not has_official_unit():
         return {"ok": False, "error": "systemctl 里没有 ming-official 这个服务："
                                        "请把 服务端/ming-official.service 部署到 /etc/systemd/system/ "
