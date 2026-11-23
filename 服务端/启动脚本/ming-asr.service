@@ -6,6 +6,10 @@ After=network.target
 Type=simple
 User=root
 Environment=PYTHONUNBUFFERED=1
+# 模型已在本地缓存，强制离线可避免启动时联网校验 huggingface 元数据
+# （国内网络下那一步会卡住几十秒到几分钟，表现为「warming up」不结束）
+Environment=HF_HUB_OFFLINE=1
+Environment=HF_HUB_DISABLE_TELEMETRY=1
 # 按你的环境改：虚拟环境路径与脚本位置（可选组件，不装也不影响主流程）
 ExecStart=/opt/asr-venv/bin/python /opt/asr-scripts/asr_server.py 8011
 Restart=always

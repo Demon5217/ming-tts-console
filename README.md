@@ -31,6 +31,7 @@
 - **任务能力收敛**：切任务后只显示该任务真正生效的参数，无关项直接从界面消失，请求体也只发有效字段。
 - **质量控制**：失败自动换种子重试、时长/音量异常检测、ASR 念字复核（防「全是噪音」）、长文按 24 字分段并复用首段音色。
 - **音色库**：参考音频 + 逐字稿存在浏览器 IndexedDB，可保存、试听、删除；自动转写走本机 ASR（`8011`）。
+- **ASR 随管家启停**：管家起来就在后台拉起 `ming-asr`（`faster-whisper small`，跑 CPU 不占显存），管家退出时一起停；页脚有状态灯，没注册该服务时显示「ASR 未就绪」但不影响 TTS。
 - **内置音色**：233 条内置角色按「角色 → 情绪」聚合成 85 个，用性别 / 年龄 / 语言 / 情绪标签筛选，不用记关键词。
 - **其他**：批量长文（一行一个文件）、A/B 对比、请求体查看、生成历史、日志浮层、`Ctrl+Enter` 生成 / `Esc` 停止。
 
@@ -79,7 +80,7 @@ THIRD-PARTY.md            第三方组件、模型与音色资源的许可说明
 - Python 3.8+（用来跑管家；Windows 默认按 `C:\Program Files\Python313\python.exe` 写，Linux 默认 `python3`，都可改）
 - NVIDIA 驱动可用 `nvidia-smi`；6GB 显存起步（两套引擎不能同时常驻）
 - 已按 Ming-3.0-TTS 官方说明装好模型与依赖（**本仓库不含模型权重**）
-- ASR 可选：`funasr`/`sensevoice` 之类的本机服务跑在 `8011`，没有也能用，只是少了逐字稿自动转写和内容校验
+- ASR 可选：把 `服务端/启动脚本/ming-asr.service` 部署到 `/etc/systemd/system/`（`faster-whisper` 装在 `/opt/asr-venv`，跑 CPU）。注册了它，管家启动时会自动拉起、退出时自动停；没注册也能用，只是少了逐字稿自动转写和内容校验。
 - **macOS 不在支持范围**：没有 CUDA，显存假设不成立，脚本也没做适配
 
 ## 快速开始
@@ -160,7 +161,7 @@ bash scripts/check.sh    # Python/Shell 语法 + 个人路径扫描，CI 也跑�
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/`、`/ming-console.html` | 控制台页面（同目录，`no-store`） |
-| GET | `/status` | `{official, fast, vram:{used,free}, c_free_gb, log}` |
+| GET | `/status` | `{official, fast, asr, vram:{used,free}, c_free_gb, log}` |
 | GET | `/health` | 管家自身健康检查 |
 | POST | `/start?engine=official\|fast` | 先 WSL 自检，再启引擎并轮询 `/health`（完整模式最长 10 分钟、快速模式最长 25 分钟） |
 | POST | `/stop?engine=official\|fast\|all` | 停引擎 |

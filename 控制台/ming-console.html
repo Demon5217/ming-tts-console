@@ -817,6 +817,7 @@
 <footer id="statusbar">
   <span class="sb-item"><span class="dot" id="sbDot"></span><span id="sbState">引擎检测中…</span></span>
   <span class="sb-item sb-grow" id="svchint" title="">服务管家：检测中…</span>
+  <span class="sb-item" title="ASR 随管家启停：管家在就自动跑，关掉管家即停（跑 CPU，不占显存）"><span class="dot" id="asrDot"></span><span id="asrState">ASR</span></span>
   <span class="sb-item" id="sbTask">任务 TTS</span>
   <button id="histBtn" class="ghost sm">历史</button>
   <button id="logBtn" class="ghost sm">日志</button>
@@ -2379,6 +2380,12 @@ async function hostStatus(){
     const txt = `管家正常 · 完整模式 ${j.official ? '运行中' : '未启动'} · 快速模式 ${j.fast ? '运行中' : '未启动'} · 显存 ${v.used >= 0 ? v.used + 'MB' : '未知'} · 磁盘可用 ${j.c_free_gb}GB`;
     $('svchint').textContent = txt;
     $('svchint').title = txt;
+    // ASR 跟着管家走：管家在 = ASR 应该可用；没亮说明服务没注册或没起来
+    if($('asrDot')){
+      $('asrDot').className = 'dot ' + (j.asr ? 'ok' : 'err');
+      $('asrDot').title = j.asr ? 'ASR 8011 可用：转写与内容校验生效' : 'ASR 未就绪：转写会失败，内容校验会被跳过';
+    }
+    if($('asrState')) $('asrState').textContent = j.asr ? 'ASR 就绪' : 'ASR 未就绪';
   }catch(e){
     hostOk = false;
     const txt = '服务管家没起来：双击「启动Ming控制台.cmd」，浏览器会自动打开本页；之后启停都在这里点。';
@@ -2386,6 +2393,8 @@ async function hostStatus(){
     $('svchint').title = txt;
     if($('sbState')) $('sbState').textContent = '服务管家未运行';
     if($('sbDot')) $('sbDot').className = 'dot err';
+    if($('asrDot')) $('asrDot').className = 'dot';
+    if($('asrState')) $('asrState').textContent = 'ASR';
   }
   hostButtons();
 }

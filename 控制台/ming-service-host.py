@@ -8,14 +8,20 @@
 接口：
   GET  /                            -> 控制台页面（同目录 ming-console.html）
   GET  /ming-console.html           -> 同上
-  GET  /status                      -> {official, fast, vram_used, log}
+  GET  /status                      -> {official, fast, asr, vram, c_free_gb, log}
   POST /start?engine=official|fast   -> 先做 WSL 自检，再启动引擎并等 /health 通
   POST /stop?engine=official|fast|all
+
+ASR（可选，8011）不归页面管，跟着管家进程走：管家起来就在后台拉起，
+管家退出（Ctrl+C / SIGTERM / 正常退出）时一起停掉。它跑的是 faster-whisper
+small（device=cpu, int8），只吃内存不吃显存，所以和两套引擎不冲突。
 """
 
+import atexit
 import json
 import os
 import shlex
+import signal
 import socket
 import subprocess
 import sys
@@ -34,6 +40,9 @@ PORT = int(os.environ.get("MING_HOST_PORT") or 8766)
 IS_WIN = sys.platform == "win32"
 # 引擎脚本所在目录（服务端部署位置），可用环境变量 MING_SERVICE_ROOT 覆盖
 SERVICE_ROOT = os.environ.get("MING_SERVICE_ROOT") or "/opt/sglang"
+# 可选 ASR 服务（faster-whisper small，跑 CPU），生命周期跟着管家进程
+ASR_UNIT = "ming-asr"
+ASR_PORT = int(os.environ.get("MING_ASR_PORT") or 8011)
 # 发行版名可配置：启动脚本 config.cmd 里设置 MING_WSL_DISTRO，未设置时用默认值
 DISTRO = os.environ.get("MING_WSL_DISTRO") or "Ubuntu-22.04"
 # Windows 走 WSL 执行 shell；Linux 直接本地 bash
@@ -159,6 +168,47 @@ def systemd_running():
     return first in ("running", "degraded", "starting")
 
 
+def has_asr_unit():
+    return sh_ok("systemctl cat %s >/dev/null 2>&1 && echo yes || echo no" % ASR_UNIT)
+
+
+def asr_active():
+    return port_alive(ASR_PORT)
+
+
+def start_asr():
+    """管家起来时顺带拉起 ASR；起不来只记日志，绝不影响引擎与页面。
+
+    放在后台线程里做（模型暖机要十几秒），避免拖慢页面打开。
+    """
+    if asr_active():
+        say("ASR 已在运行（%d）" % ASR_PORT)
+        return True
+    if not has_systemctl() or not systemd_running():
+        say("跳过 ASR：systemd 不可用（容器里需要手动起 %d，不影响 TTS）" % ASR_PORT)
+        return False
+    if not has_asr_unit():
+        say("跳过 ASR：没有注册 %s 服务（可选组件，不影响 TTS 生成）" % ASR_UNIT)
+        return False
+    say("启动 ASR（%d）…" % ASR_PORT)
+    sh("systemctl start %s 2>&1 || true" % ASR_UNIT, timeout=120)
+    t0 = time.time()
+    while time.time() - t0 < 120:
+        if asr_active():
+            say("ASR 就绪（%d），转写与内容校验可用" % ASR_PORT)
+            return True
+        time.sleep(2)
+    say("ASR 未就绪：看 journalctl -u %s（不影响 TTS 生成）" % ASR_UNIT)
+    return False
+
+
+def stop_asr():
+    if not asr_active():
+        return
+    sh("systemctl stop %s 2>/dev/null || true" % ASR_UNIT, timeout=120)
+    say("已停 ASR（%d）" % ASR_PORT)
+
+
 def stop_engine(name):
     if name in ("official", "all"):
         sh("systemctl stop ming-official 2>/dev/null || true")
@@ -231,6 +281,7 @@ def status():
     return {
         "official": port_alive(8010),
         "fast": port_alive(8000),
+        "asr": asr_active(),
         "vram": vram_used(),
         "c_free_gb": free_c_gb(),
         "log": _log[-12:],
@@ -306,8 +357,29 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+def _on_exit():
+    """管家退出时把 ASR 一起带走（强杀走不到这里，由「停止.cmd」兜底）。"""
+    try:
+        stop_asr()
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
+    atexit.register(_on_exit)
+
+    def _sig(signum, frame):
+        raise SystemExit(0)
+
+    for _s in (signal.SIGINT, signal.SIGTERM):
+        try:
+            signal.signal(_s, _sig)
+        except Exception:
+            pass
+
     say("服务管家已启动，端口 %d（页面同端口）" % PORT)
+    # ASR 在后台线程里拉起来，页面不等它暖机
+    threading.Thread(target=start_asr, daemon=True).start()
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     if "--open" in sys.argv:
         threading.Timer(0.8, lambda: webbrowser.open("http://127.0.0.1:%d/%s" % (PORT, PAGE))).start()
