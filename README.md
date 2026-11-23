@@ -48,6 +48,7 @@ ming-service-host.py  ── 静态页面 + /start /stop /status ──► wsl.e
 
 ```
 控制台/                   页面 + 管家 + 启动脚本
+  config.cmd              唯一的本地配置点（Python 路径、WSL 发行版）
   ming-console.html       单文件控制台（内联 CSS/JS）
   ming-service-host.py    服务管家：静态页面 + 引擎启停 API
   wsl-guard.ps1           WSL 自检 / 重置 / keepalive
@@ -59,14 +60,14 @@ ming-service-host.py  ── 静态页面 + /start /stop /status ──► wsl.e
   ming-official.service   systemd unit
   启动脚本/                start_ming.sh、ming-tts.service、ming-asr.service 等
   voice_data.js           内置音色清单（页面数据来源）
-文档/
-  说明.md                 开发过程与决策记录（含踩坑）
 ```
+
+开发过程笔记（含本机路径、调参记录）不随仓库发布，只留在本地。
 
 ## 环境要求
 
-- Windows 11 + WSL2（开发机用 `Ubuntu-22.04`）
-- Python 3.13（脚本里写死 `C:\Program Files\Python313\python.exe`，换路径要改两个 `.cmd` 和管家里的启动参数）
+- Windows 11 + WSL2（任意发行版，默认按 `Ubuntu-22.04` 写，可改）
+- Python 3.10+ 的 Windows 解释器（用来跑管家；默认按 `C:\Program Files\Python313\python.exe` 写，可改）
 - NVIDIA 驱动可用 `nvidia-smi`；6GB 显存起步（两套引擎不能同时常驻）
 - 已按 Ming-3.0-TTS 官方说明装好模型与依赖（**本仓库不含模型权重**）
 - ASR 可选：`funasr`/`sensevoice` 之类的本机服务跑在 `8011`，没有也能用，只是少了逐字稿自动转写和内容校验
@@ -78,13 +79,21 @@ git clone https://github.com/Demon5217/ming-tts-console.git
 cd ming-tts-console
 ```
 
-1. 按你的环境改路径 / 发行版名：
-   - `控制台/启动Ming控制台.cmd`、`控制台/启动Ming-TTS.cmd` 里的 Python 路径；
-   - `控制台/ming-service-host.py` 顶部的 `PORT`、`DISTRO`；
-   - `服务端/serve_official.py` 里的模型目录、参考音频目录。
-2. 把 `服务端/` 里的 `serve_official.py` 和 systemd unit 部署进 WSL（示例：`/opt/ming-official/`）。
+1. **只改一个文件**：打开 `控制台/config.cmd`，改这两项（其余脚本都会 `call` 它）：
+   ```bat
+   set "PYTHON_EXE=C:\Program Files\Python313\python.exe"
+   set "MING_WSL_DISTRO=Ubuntu-22.04"
+   ```
+   - `PYTHON_EXE`：你的 Windows Python 路径（`where python` 可查）
+   - `MING_WSL_DISTRO`：`wsl -l -v` 里看到的发行版名，管家和 `wsl-guard.ps1` 都读这个值
+   > 直接用环境变量也行：先 `set MING_WSL_DISTRO=你的发行版` 再启动，脚本不会覆盖已设置的值。
+2. 把 `服务端/` 里的 `serve_official.py` 和 systemd unit 部署进 WSL（示例：`/opt/ming-official/`），模型目录、参考音频目录按官方结构放。
 3. 双击 `控制台/启动Ming控制台.cmd`，浏览器会打开 `http://127.0.0.1:8766/ming-console.html`。
 4. 在页面上点「完整模式」→ 确认冷启动 → 等状态变「就绪」；之后选任务、选音色、贴稿、生成。
+
+### 端口
+
+`8766`（管家 + 页面）、`8010`（完整模式）、`8000`（快速模式）、`8011`（可选 ASR）。改端口要同时改 `ming-service-host.py` 顶部的 `PORT` 和页面里的接口地址。
 
 ## 管家 API
 
@@ -104,7 +113,7 @@ cd ming-tts-console
 - `fp16` 在这套权重上跑不通（bf16/Half dtype 冲突），只能用默认精度。
 - `flow_steps` 外部不可调（官方 `generate()` 不接该参数）；`cfg` 降档反而更慢（实测 1.0→15.6s、1.5→12.2s、2.0→10.7s）。
 - 内置音色的性别 / 年龄是从标签文案推断的（`男性（男童）`、`老年` 这类字样），不是模型独立字段。
-- 脚本按 Windows 路径写死，跨平台要自己改。
+- 启动脚本是 Windows 批处理 + PowerShell；Linux/macOS 需自行改写入口。
 
 ## 许可
 

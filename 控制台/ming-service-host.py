@@ -30,7 +30,8 @@ PAGE = "ming-console.html"
 GUARD = os.path.join(BASE, "wsl-guard.ps1")
 
 PORT = 8766
-DISTRO = "Ubuntu-22.04"
+# 发行版名可配置：启动脚本 config.cmd 里设置 MING_WSL_DISTRO，未设置时用默认值
+DISTRO = os.environ.get("MING_WSL_DISTRO") or "Ubuntu-22.04"
 WSL = ["wsl.exe", "-d", DISTRO, "-e", "bash", "-lc"]
 
 _lock = threading.Lock()
@@ -105,7 +106,7 @@ def wsl_guard():
     say("WSL 自检…")
     try:
         p = subprocess.run(
-            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", GUARD],
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", GUARD, "-Distro", DISTRO],
             capture_output=True, text=True, timeout=180,
         )
         lines = ((p.stdout or "") + (p.stderr or "")).strip().splitlines()
