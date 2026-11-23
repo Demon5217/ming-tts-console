@@ -74,7 +74,7 @@ ming-service-host.py  ── 静态页面 + /start /stop /status ──► wsl.e
 ## 快速开始
 
 ```bash
-git clone git@github.com:Demon5217/ming-tts-console.git
+git clone https://github.com/Demon5217/ming-tts-console.git
 cd ming-tts-console
 ```
 
