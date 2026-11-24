@@ -32,8 +32,8 @@
 - **质量控制**：失败自动换种子重试、时长/音量异常检测、ASR 念字复核（防「全是噪音」）、长文按 24 字分段并复用首段音色。
 - **音色库**：参考音频 + 逐字稿存在浏览器 IndexedDB，可保存、试听、删除；自动转写走本机 ASR（`8011`）。
 - **ASR 随管家启停**：管家起来就在后台拉起 `ming-asr`（`faster-whisper small`，跑 CPU 不占显存），管家退出时一起停；页脚有状态灯，没注册该服务时显示「ASR 未就绪」但不影响 TTS。起不来时管家日志会带出 `journalctl -u ming-asr` 末几行的具体原因，状态灯和文案 hover 也能看到。
-- **ASR 掉线自动补拉**：WSL 在最后一个 `wsl.exe` 会话结束后十几秒，就会把 distro 里的进程（含 systemd 服务）一起清掉，所以只靠启动时拉一次不够。管家会持有一条常驻 `wsl -e /bin/sleep infinity` 会话顶住 distro，并每 `MING_ASR_WATCH_SEC`（默认 60 秒）探一次 `8011`，掉了就补拉；退出时（含 `停止.cmd`）放掉这条会话，让 WSL 照常空闲休眠（`MING_ASR_WATCH=0` 可关整套维护）。
-- **ASR 暂停/恢复**：页脚 `ASR 就绪` 那个状态灯可以点——点一下停掉 ASR 并让巡检不再补拉（腾 CPU/内存），再点一下恢复暖机（约十秒）。重启管家会回到默认的"随管家自动运行"。
+- **ASR 掉线自动补拉**：WSL 在最后一个 `wsl.exe` 会话结束后十几秒，会把 distro 里的进程（含 systemd 服务）一起清掉；这三个 unit 都是 `disabled`，清了不会自己回来。所以管家启动时持有一条常驻 `wsl -e /bin/sleep infinity` 会话顶住 distro（约 690MB 常驻：distro 空载 ~340MB + ASR ~350MB），并每 `MING_ASR_WATCH_SEC`（默认 60 秒）探一次 `8011`，掉了就补拉；管家退出或执行 `停止.cmd` 时放掉这条会话，WSL 恢复空闲休眠。
+- **ASR 暂停/恢复**：页脚 `ASR 就绪` 那个状态灯可以点——点一下停掉 ASR 并让巡检不再补拉（腾出 ASR 的 ~350MB 与 CPU，distro 仍由管家顶住），再点一下恢复暖机（约十秒）。重启管家会回到默认的"随管家自动运行"。
 - **内置音色**：233 条内置角色按「角色 → 情绪」聚合成 85 个，用性别 / 年龄 / 语言 / 情绪标签筛选，不用记关键词。
 - **其他**：批量长文（一行一个文件）、A/B 对比、请求体查看、生成历史、日志浮层、`Ctrl+Enter` 生成 / `Esc` 停止。
 
@@ -102,7 +102,7 @@ cd ming-tts-console
    - `PYTHON_EXE`：你的 Windows Python 路径（`where python` 可查）
    - `MING_WSL_DISTRO`：`wsl -l -v` 里看到的发行版名，管家和 `wsl-guard.ps1` 都读这个值
    - 同文件还有 `MING_HOST_PORT`（默认 `8766`）和 `MING_SGLANG_DIR`（默认 `/opt/sglang`），一般不用动
-   - `MING_ASR_WATCH`（默认开）：部署了 `ming-asr` 后，管家持有一条常驻 WSL 会话防止 distro 被清理，并每 `MING_ASR_WATCH_SEC`（默认 60）秒探一次 `8011`，掉了就补拉；`set MING_ASR_WATCH=0` 可关掉整套维护（之后 ASR 只在管家启动时拉一次）
+   - `MING_ASR_WATCH`（默认开）：部署了 `ming-asr` 后，管家持有一条常驻 WSL 会话防止 distro 被清理，并每 `MING_ASR_WATCH_SEC`（默认 60）秒探一次 `8011`，掉了就补拉；`set MING_ASR_WATCH=0` 会关掉整套维护——管家不再持有会话，distro 空闲十来秒后就被清，ASR 和正在跑的引擎都会掉，下次用要重新启动（冷启动约 20–40 秒，完整/快速引擎另算）
    > 直接用环境变量也行：先 `set MING_WSL_DISTRO=你的发行版` 再启动，脚本不会覆盖已设置的值。
 2. 把 `服务端/` 里的 `serve_official.py` 和 systemd unit 部署进 WSL（示例：`/opt/ming-official/`），模型目录、参考音频目录按官方结构放。
 3. 双击**根目录的 `启动.cmd`**，浏览器会打开 `http://127.0.0.1:8766/ming-console.html`。
@@ -183,6 +183,8 @@ bash scripts/check.sh    # Python/Shell 语法 + 个人路径扫描，CI 也跑�
 - 启动脚本分两套：Windows 用 `.cmd` + PowerShell（含 WSL 自检），Linux 用 `start.sh` / `stop.sh`；macOS 未适配（无 CUDA）。
 - Linux 下引擎启停依赖 `systemctl`，服务未注册成 systemd unit 时需要手动跑 `start_ming.sh`。
 - `wsl.exe` 的 `-d` 参数**不能加引号**（写成 `-d "%VAR%"` 会把引号当成发行版名的一部分，报 `WSL_E_DISTRO_NOT_FOUND`），仓库里的脚本已按 `-d %VAR%` 写法规避。自己写脚本时注意这条。
+- 管家运行期间 WSL 不会空闲休眠（为了保住 ASR 和正在跑的引擎），内存占用约 690MB；关管家或 `停止.cmd` 后放掉常驻会话，才会还回去。
+- `ming-asr` / `ming-official` / `ming-tts` 都是 `disabled`（不设开机自启）。若被外部 `wsl --shutdown` / `wsl --terminate` 打断，三个服务都不会自动恢复，需重新在页面上启动。
 
 ## 许可
 
