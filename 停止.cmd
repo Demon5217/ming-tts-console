@@ -27,7 +27,10 @@ echo [4/4] 结束管家进程（端口 %MING_HOST_PORT%）...
 
 "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -Command "Start-Sleep -Milliseconds 600; if (Test-NetConnection 127.0.0.1 -Port %MING_HOST_PORT% -InformationLevel Quiet -WarningAction SilentlyContinue) { '仍然在监听 ' + %MING_HOST_PORT% + '，可能没有权限结束进程，请用任务管理器关闭 python.exe' } else { '已停止，端口 ' + %MING_HOST_PORT% + ' 已释放' }"
 
+rem 管家强杀不会走 atexit，这里补一刀：放掉它持有的常驻会话，让 WSL 照常空闲休眠
+"%SystemRoot%\System32\wsl.exe" -d %MING_WSL_DISTRO% -e bash -lc "pkill -f 'sleep infinity' 2>/dev/null || true"
+
 echo.
-echo 提示：引擎的显存已释放；WSL 发行版 %MING_WSL_DISTRO% 仍然保留（下次启动更快）。
+echo 提示：引擎的显存已释放；管家持有的 WSL 常驻会话已放掉，WSL 会照常空闲休眠。
 echo Press any key to close.
 pause >nul

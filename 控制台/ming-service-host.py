@@ -54,6 +54,10 @@ ASR_KEEPALIVE_SEC = int(os.environ.get("MING_ASR_KEEPALIVE_SEC") or 10)
 _shutting_down = False
 # 拉起 ASR 的互斥锁：启动线程与巡检线程别同时 systemctl start
 _asr_start_lock = threading.Lock()
+# 用户从状态灯点了"暂停"：巡检不再补拉，直到再点一次或重启管家
+_asr_paused = False
+# 常驻 WSL 会话的子进程（让 distro 不被清理）
+_keepalive = None
 # 发行版名可配置：启动脚本 config.cmd 里设置 MING_WSL_DISTRO，未设置时用默认值
 DISTRO = os.environ.get("MING_WSL_DISTRO") or "Ubuntu-22.04"
 # Windows 走 WSL 执行 shell；Linux 直接本地 bash
@@ -271,15 +275,67 @@ def stop_asr():
     say("已停 ASR（%d）" % ASR_PORT)
 
 
+def keep_wsl_alive():
+    """持有一个常驻 WSL 会话（`sleep infinity`），让 distro 不被空闲清理。
+
+    WSL 在最后一个 wsl.exe 会话结束后十几秒，会把 distro 里的进程（含 systemd 服务）
+    一起清掉；ASR 是 disabled 的，清了就不会自己回来。用一条常驻会话顶住，
+    比每隔几秒发一次 `wsl true` 便宜得多，也彻底（后者赶不上清理窗口）。
+    """
+    global _keepalive
+    if not IS_WIN:
+        return
+    if _keepalive is not None and _keepalive.poll() is None:
+        return
+    try:
+        _keepalive = subprocess.Popen(
+            ["wsl.exe", "-d", DISTRO, "-e", "/bin/sleep", "infinity"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
+        say("已持有 WSL 常驻会话（避免 distro 被空闲清理）")
+    except Exception as e:
+        _keepalive = None
+        say("持有 WSL 常驻会话失败：%s" % e)
+
+
+def release_wsl_alive():
+    """管家退出时放掉常驻会话，让 WSL 能照常空闲休眠。"""
+    global _keepalive
+    if _keepalive is None:
+        return
+    try:
+        if _keepalive.poll() is None:
+            _keepalive.kill()
+    except Exception:
+        pass
+    _keepalive = None
+
+
+def asr_pause():
+    """页脚状态灯点一下：停掉 ASR 并让巡检别再补拉（管家仍在，随时可恢复）。"""
+    global _asr_paused
+    _asr_paused = True
+    sh("systemctl stop %s 2>/dev/null || true" % ASR_UNIT, timeout=120)
+    say("ASR 已暂停（再点状态灯恢复；管家仍持有 WSL 常驻会话）")
+    return True
+
+
+def asr_resume():
+    """恢复 ASR：清掉暂停标记，交给后台线程去拉起（暖机要十几秒）。"""
+    global _asr_paused
+    _asr_paused = False
+    say("恢复 ASR（%d）…" % ASR_PORT)
+    threading.Thread(target=start_asr, daemon=True).start()
+    return True
+
+
 def asr_watch():
-    """后台线程：给 WSL 续命 + ASR 掉了就补拉。
+    """后台线程：顶住 WSL 不被清理 + ASR 掉了就补拉。
 
     为什么需要这一段：WSL 在最后一个 `wsl.exe` 会话结束后十几秒，就会把 distro 里的进程
-    （含 systemd 管理的服务）一起清掉，等下次有会话再重新起 init。实测「空闲 15 秒左右就没了」，
-    所以只靠启动时拉一次、或者几十秒才巡检一次，都追不上——每次拉起后十几秒又被清。
-
-    做法：每 ASR_KEEPALIVE_SEC（默认 10 秒）跑一次极轻的 `true`，让 distro 一直有活跃会话；
-    每 6 次心跳（约 1 分钟）用 socket 探一次 8011，真掉了才拉起。Linux 下没有这个问题，只做巡检。
+    （含 systemd 管理的服务）一起清掉。ASR 是 disabled 的，清了不会自己回来，
+    于是页面上灯变红、ASR 复核和音色库转写失效。这里持有一条常驻会话顶住 distro，
+    再按 ASR_WATCH_SEC 探端口，真掉了才补拉。Linux 下没有这个问题。
     """
     global _asr_error
     if (os.environ.get("MING_ASR_WATCH") or "").strip().lower() in ("0", "off", "no", "false"):
@@ -295,12 +351,11 @@ def asr_watch():
     fails = 0
     while not _shutting_down:
         try:
-            # 心跳：仅 Windows/WSL 需要，Linux 的 systemd 不依赖客户端会话
-            if IS_WIN:
-                sh("true", timeout=30)
+            # 常驻会话掉了（被 wsl --shutdown/--terminate 之类打断）就重新持有
+            keep_wsl_alive()
             tick += 1
-            # 只在周期点检查，避免和启动线程在刚起来时撞车
-            if tick % 6 == 0 and not asr_active():
+            # 只在周期点检查，避免和启动线程在刚起来时撞车；暂停时不补拉
+            if tick % max(1, ASR_WATCH_SEC // ASR_KEEPALIVE_SEC) == 0 and not _asr_paused and not asr_active():
                 if fails >= 3:
                     fails = 0
                     time.sleep(ASR_WATCH_SEC * 4)
@@ -390,6 +445,7 @@ def status():
         "fast": port_alive(8000),
         "asr": asr_active(),
         "asr_error": _asr_error,
+        "asr_paused": _asr_paused,
         "vram": vram_used(),
         "c_free_gb": free_c_gb(),
         "log": _log[-12:],
@@ -458,6 +514,17 @@ class Handler(BaseHTTPRequestHandler):
         elif u.path == "/stop":
             stop_engine(engine or "all")
             self._json({"ok": True, "engine": engine or "all"})
+        elif u.path == "/asr":
+            on = (q.get("on") or [""])[0].lower()
+            paused = on in ("0", "false", "off", "pause")
+            try:
+                if paused:
+                    asr_pause()
+                else:
+                    asr_resume()
+                self._json({"ok": True, "paused": paused, "asr": asr_active()})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)}, 500)
         else:
             self._json({"error": "not found"}, 404)
 
@@ -473,6 +540,7 @@ def _on_exit():
         stop_asr()
     except Exception:
         pass
+    release_wsl_alive()
 
 
 if __name__ == "__main__":

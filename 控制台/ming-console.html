@@ -817,7 +817,7 @@
 <footer id="statusbar">
   <span class="sb-item"><span class="dot" id="sbDot"></span><span id="sbState">引擎检测中…</span></span>
   <span class="sb-item sb-grow" id="svchint" title="">服务管家：检测中…</span>
-  <span class="sb-item" title="ASR 随管家启停：管家在就自动跑，关掉管家即停（跑 CPU，不占显存）"><span class="dot" id="asrDot"></span><span id="asrState">ASR</span></span>
+  <span class="sb-item" id="asrBtn" style="cursor:pointer" title="ASR 随管家启停：管家在就自动跑，关掉管家即停（跑 CPU，不占显存）；点一下可暂停/恢复"><span class="dot" id="asrDot"></span><span id="asrState">ASR</span></span>
   <span class="sb-item" id="sbTask">任务 TTS</span>
   <button id="histBtn" class="ghost sm">历史</button>
   <button id="logBtn" class="ghost sm">日志</button>
@@ -2363,7 +2363,7 @@ const TEMPLATES = [
 
 /* ---------- 服务管家（本地 8766，负责一键启停两套引擎） ---------- */
 const HOST = 'http://127.0.0.1:8766';
-let hostBusy = false, hostOk = false;
+let hostBusy = false, hostOk = false, asrPaused = false;
 
 function hostButtons(){
   ['bStartOff','bStartFast','bStopAll','bRefresh','bStop'].forEach(id=>{
@@ -2381,17 +2381,27 @@ async function hostStatus(){
     $('svchint').textContent = txt;
     $('svchint').title = txt;
     // ASR 跟着管家走：管家在 = ASR 应该可用；没亮说明服务没注册或没起来
+    asrPaused = !!j.asr_paused;
     if($('asrDot')){
-      $('asrDot').className = 'dot ' + (j.asr ? 'ok' : 'err');
-      $('asrDot').title = j.asr ? 'ASR 8011 可用：转写与内容校验生效'
-        : ('ASR 未就绪：转写会失败，内容校验会被跳过' + (j.asr_error ? ('\n原因：' + j.asr_error) : ''));
+      if(asrPaused){
+        $('asrDot').className = 'dot wait';
+        $('asrDot').title = 'ASR 已暂停（手动）：点一下恢复，转写与内容校验暂时不可用';
+      }else{
+        $('asrDot').className = 'dot ' + (j.asr ? 'ok' : 'err');
+        $('asrDot').title = j.asr ? 'ASR 8011 可用：转写与内容校验生效'
+          : ('ASR 未就绪：转写会失败，内容校验会被跳过' + (j.asr_error ? ('\n原因：' + j.asr_error) : ''));
+      }
     }
     if($('asrState')){
-      $('asrState').textContent = j.asr ? 'ASR 就绪' : 'ASR 未就绪';
-      $('asrState').title = j.asr ? 'ASR 8011 可用' : (j.asr_error || 'ASR 未就绪');
+      $('asrState').textContent = asrPaused ? 'ASR 已暂停' : (j.asr ? 'ASR 就绪' : 'ASR 未就绪');
+      $('asrState').title = asrPaused ? 'ASR 已暂停（点一下恢复）'
+        : (j.asr ? 'ASR 8011 可用（点一下可暂停）' : (j.asr_error || 'ASR 未就绪'));
     }
+    if($('asrBtn')) $('asrBtn').title = asrPaused ? 'ASR 已暂停：点一下恢复'
+      : 'ASR 随管家启停；点一下可暂停（腾 CPU/内存）';
   }catch(e){
     hostOk = false;
+    asrPaused = false;
     const txt = '服务管家没起来：双击「启动Ming控制台.cmd」，浏览器会自动打开本页；之后启停都在这里点。';
     $('svchint').textContent = txt;
     $('svchint').title = txt;
@@ -2424,6 +2434,22 @@ $('bStartOff').onclick = ()=> hostCall('/start?engine=official', '启动完整�
 $('bStartFast').onclick = ()=> hostCall('/start?engine=fast', '启动快速模式');
 $('bStopAll').onclick = ()=> hostCall('/stop?engine=all', '全部停止');
 $('bRefresh').onclick = ()=>{ hostStatus(); checkHealth(); checkOfficial(); };
+// 页脚 ASR 状态灯：点一下暂停（省 CPU），再点恢复
+if($('asrBtn')){
+  $('asrBtn').onclick = async ()=>{
+    if(!hostOk){ log('服务管家未运行，无法操作 ASR', 'e'); return; }
+    const pausing = !asrPaused;
+    try{
+      const r = await fetch(HOST + '/asr?on=' + (pausing ? '0' : '1'), {cache:'no-store'});
+      const j = await r.json();
+      if(!j.ok) throw new Error(j.error || '操作失败');
+      log(pausing ? 'ASR 已暂停（再点状态灯恢复）' : '已恢复 ASR，暖机需要十几秒', 's');
+    }catch(e){
+      log('ASR 操作失败: ' + e.message, 'e');
+    }
+    hostStatus();
+  };
+}
 /* 预留双开入口（显存不够时不要放开）：
 $('bStartBoth').onclick = async ()=>{
   if(!hostOk){ log('服务管家未运行', 'e'); return; }
